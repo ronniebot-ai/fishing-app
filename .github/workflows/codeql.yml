@@ -1,0 +1,47 @@
+# CodeQL static analysis.
+#
+# Written as a workflow file rather than enabled through Settings -> Default
+# setup, because the point is for it to be visible in the repository: a file
+# someone can open and discuss, not a toggle buried in a settings page.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, Monday 03:17 UTC. Off the hour on purpose — scheduled jobs at
+    # :00 queue behind everyone else's cron.
+    - cron: '17 3 * * 1'
+
+jobs:
+  analyze:
+    name: Analyze (javascript-typescript)
+    runs-on: ubuntu-latest
+
+    permissions:
+      # Required to upload results to the Security tab.
+      security-events: write
+      # Required by the action to read workflow run metadata.
+      actions: read
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          # The default query suite fires on very little in a pure frontend
+          # app. security-extended is what makes the run worth its minutes.
+          queries: security-extended
+
+      # No autobuild step: JavaScript and TypeScript are interpreted, so
+      # CodeQL analyses the source directly. Adding one would only cost time.
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:javascript-typescript'

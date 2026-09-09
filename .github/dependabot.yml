@@ -1,0 +1,23 @@
+# `npm audit` reports; Dependabot is what actually fixes things. Without this
+# the audit gate slowly turns red and stays there.
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # One PR per week for routine dev-tooling bumps rather than a dozen.
+      # Security updates are exempt from grouping and still arrive on their own.
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+
+  # Do not skip this one. Pinned action versions are themselves a supply-chain
+  # surface, and nothing else in the repo will ever update them.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

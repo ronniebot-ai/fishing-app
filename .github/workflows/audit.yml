@@ -1,0 +1,47 @@
+# Dependency audit.
+#
+# The schedule is the important trigger, not the push. Audit results change
+# while the code does not, because new advisories get published — a
+# push-triggered audit only ever reports the state at the moment you pushed.
+name: Audit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '41 4 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      # `npm audit` reads the lockfile and queries the registry; it needs no
+      # install, so this is much faster than a full `npm ci`.
+      - name: Audit dependencies
+        # --audit-level=high, not the default of low: with ~860 dev
+        # dependencies, low-severity transitive advisories appear
+        # continuously. A gate that is red most of the time gets ignored as a
+        # habit, which is the same as not having one. Dependabot handles the
+        # long tail as pull requests instead.
+        run: npm audit --audit-level=high
+
+      # Production dependencies get the stricter treatment. Only 11 packages
+      # reach the browser, so anything at all in that set is worth surfacing —
+      # this step reports without failing the build.
+      - name: Audit production dependencies (report only)
+        if: always()
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=low
