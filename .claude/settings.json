@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node scripts/validate_palette.js \"#5BC8D8,#F2A65A\" --mode dark --surface \"#07202E\")",
+      "Bash(node scripts/validate_palette.js \"#0E7C8C,#B85C00\" --mode light --surface \"#E9EFEE\")",
+      "Bash(opencli browser *)",
+      "Bash(opencli browser fish eval ' *)",
+      "Bash(curl -s \"http://localhost:5199/src/App.css\")",
+      "Bash(cd \"C:/Users/Ronni/React/Fishing App\" && printf '\\\\n# Claude Code local overrides \\(personal, not shared\\)\\\\n.claude/settings.local.json\\\\n' >> .gitignore && tail -8 .gitignore)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\Ronni\\React\\Fishing App"
+    ]
+  }
+}

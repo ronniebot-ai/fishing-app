@@ -1,0 +1,10 @@
+# Normalise to LF in the repository. Development happens on Windows but CI
+# runs on ubuntu-latest, so committing CRLF would put stray carriage returns
+# into anything a Linux runner executes.
+* text=auto eol=lf
+
+# Binary assets git must not touch.
+*.png binary
+*.ico binary
+*.woff binary
+*.woff2 binary
