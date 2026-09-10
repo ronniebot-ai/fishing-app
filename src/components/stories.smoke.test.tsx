@@ -15,23 +15,24 @@ import type { ComponentType } from 'react';
 import { describe, expect, it } from 'vitest';
 import preview from '../../.storybook/preview';
 import * as readout from './Readout.stories';
-import * as tideChart from './TideChart.stories';
+import * as spine from './Spine.stories';
 import * as tideTable from './TideTable.stories';
 import * as verdict from './Verdict.stories';
 import * as whenToGo from './WhenToGo.stories';
-import * as windRain from './WindRainChart.stories';
 
 setProjectAnnotations([preview]);
 
-const modules = { verdict, readout, whenToGo, tideChart, windRain, tideTable };
+const modules = { verdict, readout, whenToGo, spine, tideTable };
 
 /**
- * Stories whose component correctly draws nothing: `TideChart` and
- * `TideTable` both bail out rather than frame an empty plot, and the app
- * supplies the surrounding copy. Listing them here means a *data-bearing*
- * story going silently blank is still a failure.
+ * Nothing here is allowed to render blank any more.
+ *
+ * Both former members earned their way out. `TideTable` is an antd `Table`
+ * now, which keeps its header and puts a sentence where the rows would be; and
+ * `Spine` drops only the tide panel inland rather than the whole drawing,
+ * because wind and rain still reach the spot.
  */
-const DRAWS_NOTHING = new Set(['tideChart/NoMarineData', 'tideTable/NoTides']);
+const DRAWS_NOTHING = new Set<string>();
 
 describe.each(Object.entries(modules))('%s stories', (name, module) => {
   // `composeStories` is generic over the whole module, so the entries come

@@ -8,6 +8,29 @@ import { afterEach } from 'vitest';
 afterEach(cleanup);
 
 /**
+ * jsdom ships no `matchMedia`. Ant Design's responsive observer calls it while
+ * mounting anything that consults a breakpoint — `Table` does, internally — and
+ * `useMode` reads the colour-scheme preference through it.
+ *
+ * Every query reports false, which puts the suite on the smallest breakpoint
+ * and the dark palette. Both are the app's own defaults, so a component under
+ * test renders the arrangement it would on a phone before dawn.
+ */
+if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
+  window.matchMedia = (query: string): MediaQueryList =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }) as unknown as MediaQueryList;
+}
+
+/**
  * jsdom ships no ResizeObserver, and `useElementWidth` builds one
  * unconditionally — without this every chart component throws on mount.
  *

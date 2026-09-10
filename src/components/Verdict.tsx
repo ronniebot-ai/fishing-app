@@ -1,3 +1,4 @@
+import { Alert } from 'antd';
 import type { FishingScore } from '../domain/score';
 import { scoreBand } from '../domain/units';
 
@@ -27,10 +28,13 @@ export function Verdict({ score, summary }: VerdictProps) {
       <p className="verdict-sub">{summary}</p>
 
       {score.unfishable && (
-        <p className="gate" role="alert">
-          <b>{score.gateReason}.</b>
-          <span>Not worth going, and not safe on exposed ground.</span>
-        </p>
+        <Alert
+          className="gate"
+          type="error"
+          showIcon={false}
+          title={`${score.gateReason}.`}
+          description="Not worth going, and not safe on exposed ground."
+        />
       )}
     </div>
   );

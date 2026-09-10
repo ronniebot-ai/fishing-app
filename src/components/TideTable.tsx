@@ -1,3 +1,5 @@
+import { Table } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import type { TideExtreme } from '../domain/tides';
 import { epochToSpotTime } from '../domain/units';
 
@@ -7,6 +9,14 @@ interface TideTableProps {
   now: number;
   /** How many upcoming turns to list. */
   limit?: number;
+}
+
+interface Row {
+  key: number;
+  kind: string;
+  time: string;
+  height: string;
+  next: boolean;
 }
 
 /** "today" / "tomorrow" / weekday, so a time is never ambiguous. */
@@ -26,44 +36,50 @@ function daySuffix(t: number, utcOffsetSeconds: number, now: number): string {
   ];
 }
 
+const columns: ColumnsType<Row> = [
+  { title: 'Tide', dataIndex: 'kind', key: 'kind' },
+  { title: 'Time', dataIndex: 'time', key: 'time', className: 'cell-big' },
+  { title: 'Height', dataIndex: 'height', key: 'height', align: 'right', className: 'cell-big' },
+];
+
 /**
  * The next tide turns.
  *
  * A tide table is the artefact anglers have used for a century, so it is set
- * as one — tabular figures, heights signed against mean sea level.
+ * as one — tabular figures, heights signed against mean sea level. The heading
+ * lives in the page, not here.
  */
 export function TideTable({ extremes, utcOffsetSeconds, now, limit = 6 }: TideTableProps) {
   const upcoming = extremes.filter((e) => e.t >= now - 1800_000).slice(0, limit);
-  if (upcoming.length === 0) return null;
+
+  const rows: Row[] = upcoming.map((e, i) => ({
+    key: e.t,
+    kind: e.kind === 'high' ? 'High' : 'Low',
+    time: `${epochToSpotTime(e.t, utcOffsetSeconds)} ${daySuffix(e.t, utcOffsetSeconds, now)}`,
+    height: `${e.height > 0 ? '+' : e.height < 0 ? '−' : ''}${Math.abs(e.height).toFixed(2)} m`,
+    // The turn the angler is actually waiting for.
+    next: i === 0,
+  }));
 
   return (
-    <>
-      <h2 className="sec">Next tides</h2>
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Tide</th>
-              <th>Time</th>
-              <th className="r">Height</th>
-            </tr>
-          </thead>
-          <tbody>
-            {upcoming.map((e) => (
-              <tr key={e.t}>
-                <td>{e.kind === 'high' ? 'High' : 'Low'}</td>
-                <td className="big">
-                  {epochToSpotTime(e.t, utcOffsetSeconds)} {daySuffix(e.t, utcOffsetSeconds, now)}
-                </td>
-                <td className="r big">
-                  {e.height > 0 ? '+' : e.height < 0 ? '−' : ''}
-                  {Math.abs(e.height).toFixed(2)} m
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </>
+    <div className="data-table">
+      <Table<Row>
+        columns={columns}
+        dataSource={rows}
+        pagination={false}
+        size="small"
+        rowClassName={(row) => (row.next ? 'is-now' : '')}
+        // See WhenToGo: an empty state here is a sentence, not antd's stock
+        // grey illustration.
+        locale={{
+          emptyText: (
+            <p className="empty">
+              No tide turns to list — this spot is too far inland for the wave model to
+              reach, so there is no tide here, only wind and rain.
+            </p>
+          ),
+        }}
+      />
+    </div>
   );
 }

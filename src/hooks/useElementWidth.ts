@@ -19,13 +19,21 @@ export function useElementWidth(ref: RefObject<HTMLElement | null>): number {
 
     const observer = new ResizeObserver((entries) => {
       const w = entries[0]?.contentRect.width ?? 0;
+      // A zero means the element is not being rendered right now — it is
+      // inside a hidden tab pane, a closed drawer, a collapsed section — not
+      // that it is genuinely zero wide. Keeping the last real measurement is
+      // what lets a chart survive being hidden and shown again; without it the
+      // `width > 0` guard in every caller blanks the drawing on the way out
+      // and leaves it blank until the next resize.
+      if (w <= 0) return;
       // Round to whole pixels: sub-pixel churn would redraw on every frame
       // during a resize for no visible gain.
       setWidth(Math.round(w));
     });
 
     observer.observe(node);
-    setWidth(Math.round(node.getBoundingClientRect().width));
+    const initial = Math.round(node.getBoundingClientRect().width);
+    if (initial > 0) setWidth(initial);
 
     return () => observer.disconnect();
   }, [ref]);

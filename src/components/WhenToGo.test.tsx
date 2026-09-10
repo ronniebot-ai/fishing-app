@@ -53,10 +53,12 @@ describe('WhenToGo', () => {
     expect(days).toEqual(['Today', 'Now', 'Today']);
   });
 
-  it('explains itself instead of showing an empty table', () => {
+  it('explains itself instead of listing nothing', () => {
     render(<WhenToGo windows={[]} utcOffsetSeconds={SYDNEY_UTC_OFFSET} now={NOW} />);
 
-    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    // The table keeps its header — the columns are still the answer's shape —
+    // but carries a sentence where the rows would be rather than a blank grid.
+    expect(bodyRows().some((r) => within(r).queryByText(/^\d+$/))).toBe(false);
     expect(screen.getByText(/Nothing worth a trip/)).toBeInTheDocument();
   });
 });
