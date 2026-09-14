@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "serve": "node server/start.cjs",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "vitest run",
@@ -21,6 +22,7 @@
     "@fontsource/ibm-plex-sans-condensed": "^5.3.0",
     "@tanstack/react-query": "^5.102.8",
     "antd": "^6.6.3",
+    "express": "^5.2.1",
     "leaflet": "^1.9.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
@@ -62,6 +64,9 @@
     },
     "files": [
       "dist-app/**/*",
+      "server/**/*",
+      "!server/data",
+      "!server/**/*.test.js",
       "electron/**/*",
       "package.json"
     ],

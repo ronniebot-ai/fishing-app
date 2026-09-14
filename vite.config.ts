@@ -1,5 +1,7 @@
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vitest/config'
+import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
+import { defineConfig, type Plugin } from 'vitest/config'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // Two targets share one renderer:
@@ -24,6 +26,7 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
+      apiServer(),
       ...(isElectron || isTest
         ? []
         : [
@@ -81,11 +84,13 @@ export default defineConfig(({ mode }) => {
           ]),
     ],
 
-    // Two suites with different needs, kept apart so neither pays for the
-    // other: the domain maths is pure and runs in node, while anything
-    // rendering React needs a DOM. The split is by extension - `.test.ts`
-    // is domain, `.test.tsx` is a component - so a new file lands in the
-    // right project by being named for what it is.
+    // Three suites with different needs, kept apart so none pays for the
+    // others: the domain maths is pure and runs in node, anything rendering
+    // React needs a DOM, and the server is CommonJS with a real database
+    // behind it. The split is by location and extension - `.test.ts` under
+    // src is domain, `.test.tsx` is a component, anything under server/ is
+    // the backend - so a new file lands in the right project by being named
+    // and placed for what it is.
     test: {
       projects: [
         {
@@ -103,7 +108,52 @@ export default defineConfig(({ mode }) => {
             setupFiles: ['./src/test/setup.ts'],
           },
         },
+        {
+          test: {
+            name: 'server',
+            environment: 'node',
+            include: ['server/**/*.test.js'],
+          },
+        },
       ],
     },
   }
 })
+
+/**
+ * Serves the saved-spots API alongside the app during `vite dev` and
+ * `vite preview`.
+ *
+ * An Express app is a plain connect middleware, so the backend drops straight
+ * into Vite's stack. That keeps `npm run dev` a single command and puts the
+ * API on the same origin as the page, which is what lets the client use
+ * relative URLs in every build except the desktop one.
+ *
+ * The require is deferred: `vitest` and `storybook` load this config too, and
+ * neither should open a database to do it.
+ */
+function apiServer(): Plugin {
+  const require = createRequire(import.meta.url)
+  let api: ReturnType<typeof buildApi> | null = null
+
+  function buildApi() {
+    const { openDb } = require('./server/db.cjs')
+    const { createApi } = require('./server/api.cjs')
+    const file =
+      process.env.TIDELINE_DB ??
+      fileURLToPath(new URL('./server/data/spots.db', import.meta.url))
+    return createApi(openDb(file))
+  }
+
+  const middleware = () => (api ??= buildApi())
+
+  return {
+    name: 'tideline:api',
+    configureServer(server) {
+      server.middlewares.use(middleware())
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware())
+    },
+  }
+}

@@ -1,15 +1,34 @@
 'use strict';
 
 const { app, BrowserWindow, protocol, shell, screen } = require('electron');
+const http = require('node:http');
 const path = require('node:path');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
+const { openDb } = require('../server/db.cjs');
+const { createApi } = require('../server/api.cjs');
 
 /** Built renderer. Packaged builds carry it inside the asar. */
 const RENDERER_DIR = path.join(__dirname, '..', 'dist-app');
 
 /** Where the window remembers its size and position between runs. */
 const STATE_FILE = path.join(app.getPath('userData'), 'window-state.json');
+
+/**
+ * The saved-spot store, beside the window state rather than in the asar: the
+ * bundle is read-only and is replaced wholesale by an update, and a user's
+ * spots must survive both.
+ */
+const DB_FILE = path.join(app.getPath('userData'), 'spots.db');
+
+/**
+ * The renderer is on `app://`, which no HTTP server can answer, so the API
+ * runs on loopback and the page reaches it cross-origin. The port is fixed
+ * because it has to be named in two other places that cannot be told about it
+ * at runtime: the CSP below, and `VITE_API_BASE` in `.env.electron`.
+ */
+const API_ORIGIN = 'http://127.0.0.1:4317';
+const RENDERER_ORIGIN = 'app://tideline';
 
 /**
  * The app is served over a custom scheme rather than file://.
@@ -50,7 +69,7 @@ const CSP = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://*.tile.openstreetmap.org",
   "font-src 'self' data:",
-  "connect-src 'self' https://api.open-meteo.com https://marine-api.open-meteo.com",
+  `connect-src 'self' ${API_ORIGIN} https://api.open-meteo.com https://marine-api.open-meteo.com`,
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'none'",
@@ -81,6 +100,23 @@ function serveRenderer() {
       return new Response('Not found', { status: 404 });
     }
   });
+}
+
+/**
+ * Starts the spot API, bound to loopback so nothing off this machine can
+ * reach it. A failure here costs the spot list, not the app: the forecast is
+ * the point and it needs no server at all, and the renderer already treats an
+ * unreachable API as "this build has no library".
+ */
+function startApi() {
+  const api = createApi(openDb(DB_FILE), { allowOrigin: RENDERER_ORIGIN });
+  const server = http.createServer(api);
+
+  server.on('error', (err) => {
+    console.error('[tideline] saved spots unavailable:', err.message);
+  });
+  server.listen(Number(new URL(API_ORIGIN).port), '127.0.0.1');
+  return server;
 }
 
 function loadWindowState() {
@@ -189,6 +225,8 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     serveRenderer();
+    const api = startApi();
+    app.on('will-quit', () => api.close());
     createWindow();
 
     app.on('activate', () => {

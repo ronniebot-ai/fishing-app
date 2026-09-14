@@ -531,3 +531,196 @@ h2.sec {
 .tables-loading {
   margin-top: 26px;
 }
+
+/* ---------- saved spots ----------
+
+   The library sits between the masthead and the verdict, so it is bounded:
+   the readings are what the pane is for and a long list must not push them
+   off the fold. Rows are rule-separated, like every other list here, and the
+   two text inputs are the only ones in the app — they borrow the map
+   button's shape rather than inventing a second one. */
+
+.spots {
+  margin-top: 14px;
+}
+
+.save-spot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.save-spot input {
+  flex: 1 1 180px;
+  min-width: 0;
+  appearance: none;
+  background: var(--ground);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  font-family: var(--cond);
+  font-size: 12.5px;
+  padding: 6px 9px;
+}
+
+.save-spot input::placeholder {
+  color: var(--dim);
+}
+
+.save-spot input:focus-visible,
+.saved-spots input:focus-visible {
+  outline: none;
+  border-color: var(--curve);
+}
+
+.save-spot button,
+.saved-spots button {
+  appearance: none;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  font-family: var(--cond);
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 6px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.save-spot button[type='submit'] {
+  border-color: var(--curve);
+  color: var(--curve-ink);
+}
+
+.save-spot button:disabled {
+  color: var(--dim);
+  border-color: var(--rule);
+  cursor: default;
+}
+
+.save-error {
+  flex-basis: 100%;
+  font-family: var(--cond);
+  font-size: 12.5px;
+  color: var(--warn);
+}
+
+/* Already kept: a statement, not a control. */
+.save-spot.kept {
+  margin: 0;
+  gap: 7px;
+  font-family: var(--cond);
+  font-size: 12.5px;
+  color: var(--dim);
+}
+
+.save-spot .kept-name {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.saved-spots {
+  margin-top: 16px;
+}
+
+.saved-spots h2 {
+  font-family: var(--cond);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dim);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.saved-spots ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  /* Roughly five rows, then it scrolls: the readings keep the fold. */
+  max-height: 168px;
+  overflow-y: auto;
+}
+
+.saved-spots li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.saved-spots .go {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  border: none;
+  padding: 3px 0;
+  text-align: left;
+}
+
+.saved-spots .go .name {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved-spots .go .at {
+  font-size: 12px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The spot being read carries the annotation colour, matching its map pin. */
+.saved-spots li[data-current='true'] .go .name {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.saved-spots .edit,
+.saved-spots .drop {
+  border: none;
+  color: var(--dim);
+  padding: 4px 6px;
+}
+
+.saved-spots .edit:hover,
+.saved-spots .drop:hover {
+  color: var(--ink);
+}
+
+/* Second press removes it, so the word has to change with the meaning. */
+.saved-spots .drop:focus-visible,
+.saved-spots .drop:hover {
+  color: var(--bad);
+}
+
+.saved-spots .rename {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.saved-spots .rename input {
+  flex: 1;
+  min-width: 0;
+  appearance: none;
+  background: var(--ground);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  font-family: var(--sans);
+  font-size: 14px;
+  padding: 4px 8px;
+}

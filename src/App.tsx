@@ -2,8 +2,11 @@ import { Alert, Skeleton } from 'antd';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import './App.css';
 import { FAR_ANCHOR_KM } from './api/oceanSnap';
+import { findSaved, type SavedSpot } from './api/spots';
 import type { LatLon } from './api/types';
 import { Readout } from './components/Readout';
+import { SaveSpot } from './components/SaveSpot';
+import { SavedSpots } from './components/SavedSpots';
 import { Spine } from './components/Spine';
 import { SpotMap } from './components/SpotMap';
 import { Verdict } from './components/Verdict';
@@ -12,6 +15,7 @@ import { scoreHour } from './domain/score';
 import { formatDay, formatHour, formatLatLon } from './domain/units';
 import { useConditions } from './hooks/useConditions';
 import { useNow } from './hooks/useNow';
+import { useSavedSpots } from './hooks/useSavedSpots';
 
 // antd's Table and Tabs are the heaviest import in the app, and nothing they
 // render exists until a spot has been picked and its forecast has landed. That
@@ -33,8 +37,13 @@ export default function App() {
   const [spot, setSpot] = useState<LatLon | null>(readSpotFromUrl);
   const [cursorT, setCursorT] = useState<number | null>(null);
   const [mapOpen, setMapOpen] = useState(false);
+  // Where to fly the map, set only by choosing a saved spot. Clicking the map
+  // must not move it under the user's finger, so `handlePick` leaves this be.
+  const [focus, setFocus] = useState<LatLon | null>(null);
   const now = useNow();
   const conditions = useConditions(spot, now);
+  const library = useSavedSpots();
+  const savedHere = findSaved(library.spots, spot);
 
   // Keep the URL in step with the selection so the page is shareable.
   useEffect(() => {
@@ -59,6 +68,14 @@ export default function App() {
   const handlePick = useCallback((p: LatLon) => {
     setSpot(p);
     // The map has done its job; give the screen back to the readings.
+    setMapOpen(false);
+  }, []);
+
+  const handleSelectSaved = useCallback((saved: SavedSpot) => {
+    // A fresh object every time, so returning to the spot you are already on
+    // still flies the map back to it after you have panned away.
+    setFocus({ lat: saved.lat, lon: saved.lon });
+    setSpot({ lat: saved.lat, lon: saved.lon });
     setMapOpen(false);
   }, []);
 
@@ -89,9 +106,16 @@ export default function App() {
   return (
     <div className="app" data-map={mapState}>
       <div className="map-rail">
-        <SpotMap selected={spot} anchor={anchorFar ? anchor : null} onPick={handlePick} />
+        <SpotMap
+          selected={spot}
+          anchor={anchorFar ? anchor : null}
+          saved={library.spots}
+          focus={focus}
+          onPick={handlePick}
+          onSelectSaved={handleSelectSaved}
+        />
         <div className="spot-chip">
-          {spot ? formatLatLon(spot.lat, spot.lon) : 'Tap the coast to pick a spot'}
+          {savedHere?.name ?? (spot ? formatLatLon(spot.lat, spot.lon) : 'Tap the coast to pick a spot')}
         </div>
         {spot && (
           <button
@@ -115,6 +139,30 @@ export default function App() {
             </div>
           )}
         </header>
+
+        {library.available && (spot || library.spots.length > 0) && (
+          <div className="spots">
+            {spot && (
+              <SaveSpot
+                // A half-typed name belongs to the spot it was typed for, so
+                // picking a different one starts the field over.
+                key={`${spot.lat},${spot.lon}`}
+                spot={spot}
+                saved={savedHere}
+                saving={library.saving}
+                error={library.saveError}
+                onSave={(name) => library.save(spot, name)}
+              />
+            )}
+            <SavedSpots
+              spots={library.spots}
+              selected={spot}
+              onSelect={handleSelectSaved}
+              onRename={library.rename}
+              onRemove={library.remove}
+            />
+          </div>
+        )}
 
         {!spot && (
           <p className="placeholder">

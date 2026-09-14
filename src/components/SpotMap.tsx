@@ -2,11 +2,15 @@ import { divIcon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useEffect } from 'react';
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+import type { SavedSpot } from '../api/spots';
 import type { LatLon } from '../api/types';
 
 /** Roughly frames the Australian mainland and its coastal waters. */
 const AUSTRALIA_CENTER: [number, number] = [-27.5, 134];
 const AUSTRALIA_ZOOM = 4;
+
+/** Close enough to see the ground a spot sits on when flying to one. */
+const SPOT_ZOOM = 11;
 
 /**
  * The picked spot, in the annotation colour — the one hot mark on the page,
@@ -34,6 +38,19 @@ const anchorPin = divIcon({
   </svg>`,
   iconSize: [16, 16],
   iconAnchor: [8, 8],
+});
+
+/**
+ * A kept spot. Hollow and quiet: these are places to return to, not the place
+ * being read, so they must not compete with the hot pin for attention.
+ */
+const savedPin = divIcon({
+  className: '',
+  html: `<svg width="14" height="14" viewBox="0 0 14 14" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="7" cy="7" r="4" fill="none" stroke="#F2617A" stroke-width="1.5" opacity="0.85"/>
+  </svg>`,
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
 });
 
 function ClickHandler({ onPick }: { onPick: (p: LatLon) => void }) {
@@ -65,14 +82,38 @@ function ResizeWatcher() {
   return null;
 }
 
+/**
+ * Brings the view to a spot chosen from somewhere other than the map.
+ *
+ * The map is otherwise left alone after mount — panning it is the user's, and
+ * yanking the view back on every state change would fight them. So this reacts
+ * to `focus`, which is set only by picking a saved spot, never by a map click.
+ * A fresh object each time means choosing the same spot again still flies,
+ * which is what someone who has panned away expects.
+ */
+function Recenter({ focus }: { focus: LatLon | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (focus) map.flyTo([focus.lat, focus.lon], Math.max(map.getZoom(), SPOT_ZOOM));
+  }, [focus, map]);
+  return null;
+}
+
 interface SpotMapProps {
   selected: LatLon | null;
   /** Ocean cell the marine data was drawn from, if it is meaningfully away. */
   anchor: LatLon | null;
+  /** Kept spots, marked so they can be found again without the list. */
+  saved: SavedSpot[];
+  /** Somewhere to fly to, set by choosing a saved spot rather than clicking. */
+  focus: LatLon | null;
   onPick: (p: LatLon) => void;
+  onSelectSaved: (spot: SavedSpot) => void;
 }
 
-export function SpotMap({ selected, anchor, onPick }: SpotMapProps) {
+export function SpotMap({
+  selected, anchor, saved, focus, onPick, onSelectSaved,
+}: SpotMapProps) {
   return (
     <MapContainer
       center={selected ? [selected.lat, selected.lon] : AUSTRALIA_CENTER}
@@ -86,6 +127,23 @@ export function SpotMap({ selected, anchor, onPick }: SpotMapProps) {
       />
       <ClickHandler onPick={onPick} />
       <ResizeWatcher />
+      <Recenter focus={focus} />
+
+      {/* The one being read already has the hot pin; a second mark under it
+          would only muddy which is which. */}
+      {saved
+        .filter((s) => s.lat !== selected?.lat || s.lon !== selected?.lon)
+        .map((spot) => (
+          <Marker
+            key={spot.id}
+            position={[spot.lat, spot.lon]}
+            icon={savedPin}
+            title={spot.name}
+            alt={spot.name}
+            eventHandlers={{ click: () => onSelectSaved(spot) }}
+          />
+        ))}
+
       {selected && <Marker position={[selected.lat, selected.lon]} icon={pin} />}
       {anchor && <Marker position={[anchor.lat, anchor.lon]} icon={anchorPin} />}
     </MapContainer>

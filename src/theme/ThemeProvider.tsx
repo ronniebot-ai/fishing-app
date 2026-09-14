@@ -8,8 +8,9 @@ import { useMode } from './useMode';
  *
  * Note there is no `antd/dist/reset.css` import. antd's components carry their
  * own reset, scoped to `[class^="ant-"]`, and the global sheet would otherwise
- * fight index.css over heading weight and margins for no gain — this app has
- * no form controls, which is most of what that file exists to normalise.
+ * fight index.css over heading weight and margins for no gain. The two text
+ * inputs the saved-spot list needs are plain elements styled in App.css, not
+ * antd's, so normalising every control the sheet covers still buys nothing.
  */
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const mode = useMode();

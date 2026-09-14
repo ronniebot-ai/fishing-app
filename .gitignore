@@ -29,3 +29,6 @@ release
 
 # Claude Code local overrides (personal, not shared)
 .claude/settings.local.json
+
+# Local spot store (personal data, not shared)
+server/data
