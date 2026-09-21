@@ -13,15 +13,8 @@ export interface SavedSpot extends LatLon {
   createdAt: number;
 }
 
-/**
- * Dev and web builds are served from the same origin as the API, so a relative
- * path finds it. The desktop build is on `app://`, and is pointed at the
- * loopback server the Electron main process starts — see `.env.electron`.
- */
-const BASE: string = import.meta.env.VITE_API_BASE ?? '';
-
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(path, {
     ...init,
     headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
   });

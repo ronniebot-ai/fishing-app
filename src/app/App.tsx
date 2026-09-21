@@ -1,40 +1,59 @@
+'use client';
+
 import { Alert, Skeleton } from 'antd';
+import dynamic from 'next/dynamic';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import './App.css';
-import { FAR_ANCHOR_KM } from './api/oceanSnap';
-import { findSaved, type SavedSpot } from './api/spots';
-import type { LatLon } from './api/types';
-import { Readout } from './components/Readout';
-import { SaveSpot } from './components/SaveSpot';
-import { SavedSpots } from './components/SavedSpots';
-import { Spine } from './components/Spine';
-import { SpotMap } from './components/SpotMap';
-import { Verdict } from './components/Verdict';
-import { describeConditions } from './domain/describe';
-import { scoreHour } from './domain/score';
-import { formatDay, formatHour, formatLatLon } from './domain/units';
-import { useConditions } from './hooks/useConditions';
-import { useNow } from './hooks/useNow';
-import { useSavedSpots } from './hooks/useSavedSpots';
+import { FAR_ANCHOR_KM } from '../api/oceanSnap';
+import { findSaved, type SavedSpot } from '../api/spots';
+import type { LatLon } from '../api/types';
+import { Readout } from '../components/Readout';
+import { SaveSpot } from '../components/SaveSpot';
+import { SavedSpots } from '../components/SavedSpots';
+import { Spine } from '../components/Spine';
+import { Verdict } from '../components/Verdict';
+import { buildChatContext } from '../domain/chatContext';
+import { describeConditions } from '../domain/describe';
+import { scoreHour } from '../domain/score';
+import { parseSpot } from '../domain/spotUrl';
+import { formatDay, formatHour, formatLatLon } from '../domain/units';
+import { useChatAvailable } from '../hooks/useChat';
+import { useConditions } from '../hooks/useConditions';
+import { useNow } from '../hooks/useNow';
+import { useSavedSpots } from '../hooks/useSavedSpots';
 
 // antd's Table and Tabs are the heaviest import in the app, and nothing they
 // render exists until a spot has been picked and its forecast has landed. That
 // wait is a free place to load them.
-const DataTables = lazy(() => import('./components/DataTables'));
+const DataTables = lazy(() => import('../components/DataTables'));
 
-/** Read the selected spot out of the URL so a link restores it. */
+// Split for the same reason, and on a stronger one: most builds have no key
+// behind them, so this chunk is never asked for at all.
+const SpotChat = lazy(() => import('../components/SpotChat'));
+
+// react-leaflet reads `window` while it is being imported, so the module
+// cannot be evaluated during the server render at all — `ssr: false` keeps it
+// out of that pass rather than merely skipping its output. Nothing is lost:
+// a map is not useful until it is interactive.
+const SpotMap = dynamic(() => import('../components/SpotMap').then((m) => m.SpotMap), {
+  ssr: false,
+});
+
+/**
+ * The spot the URL names right now.
+ *
+ * Only the history listener needs this: the first spot comes from the server
+ * through `initialSpot`, which is what lets a shared link render before it
+ * hydrates. Both paths go through `parseSpot`, so neither can accept a
+ * coordinate the other would reject.
+ */
 function readSpotFromUrl(): LatLon | null {
   const params = new URLSearchParams(window.location.search);
-  if (!params.has('lat') || !params.has('lon')) return null;
-  const lat = Number(params.get('lat'));
-  const lon = Number(params.get('lon'));
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-  if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
-  return { lat, lon };
+  return parseSpot(params.get('lat'), params.get('lon'));
 }
 
-export default function App() {
-  const [spot, setSpot] = useState<LatLon | null>(readSpotFromUrl);
+export default function App({ initialSpot }: { initialSpot: LatLon | null }) {
+  const [spot, setSpot] = useState<LatLon | null>(initialSpot);
   const [cursorT, setCursorT] = useState<number | null>(null);
   const [mapOpen, setMapOpen] = useState(false);
   // Where to fly the map, set only by choosing a saved spot. Clicking the map
@@ -82,7 +101,7 @@ export default function App() {
   // `now` here is the clock; the score for the current hour is `nowScore`.
   const {
     snap, timeline, extremes, now: nowScore, nowPoint,
-    windows, utcOffsetSeconds, isLoading, error,
+    windows, utcOffsetSeconds, timezone, isLoading, error,
   } = conditions;
 
   // The readings follow the cursor on the spine, falling back to this hour
@@ -99,6 +118,20 @@ export default function App() {
   const anchorFar = snap !== null && anchor !== null && snap.distanceKm > FAR_ANCHOR_KM;
   const noMarine = snap !== null && anchor === null;
   const ready = Boolean(spot && !isLoading && !error && nowScore && nowPoint);
+
+  // What the assistant is given to answer from: the same numbers the page is
+  // drawn with, never a second fetch. Null until there is a forecast, which
+  // is also what keeps `send` from firing into nothing.
+  const chatContext = useMemo(() => {
+    if (!spot || !ready) return null;
+    return buildChatContext({
+      spot,
+      spotName: savedHere?.name ?? null,
+      timeline, extremes, windows, snap, utcOffsetSeconds, timezone, now,
+    });
+  }, [spot, ready, savedHere?.name, timeline, extremes, windows, snap, utcOffsetSeconds, timezone, now]);
+
+  const canAsk = useChatAvailable();
 
   // Without a spot the map is the only thing to do, so it takes the screen.
   const mapState = !spot || mapOpen ? 'open' : 'closed';
@@ -162,6 +195,21 @@ export default function App() {
               onRemove={library.remove}
             />
           </div>
+        )}
+
+        {/* Above the verdict, not below the tables. The question this answers
+            is almost always about the number directly underneath it — "why is
+            it only 54" — so it has to be in view at the moment that number
+            is, rather than two screens further down where nobody finds it. */}
+        {canAsk && chatContext && spot && (
+          <Suspense fallback={null}>
+            <SpotChat
+              // The conversation was reasoning about the forecast for one
+              // spot, so it does not survive picking another.
+              key={`${spot.lat},${spot.lon}`}
+              context={chatContext}
+            />
+          </Suspense>
         )}
 
         {!spot && (

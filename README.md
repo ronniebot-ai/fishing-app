@@ -7,24 +7,44 @@ how the fishing looks. Pick any point on the map; no account, no API key.
 
 ```bash
 npm install
-npm run dev       # http://localhost:5173
-npm test          # domain logic + components
+npm run dev       # http://localhost:3000
+npm test          # domain logic, components and the API routes
 npm run storybook # component workbench on http://localhost:6006
-npm run build     # production bundle + service worker
+npm run build     # production build
+npm start         # serve that build
 ```
+
+Next.js, App Router. The page and the API are one project on one origin, which
+is why the client uses relative URLs everywhere.
+
+The app is installable: `src/app/manifest.ts` gives it a name, icons and a
+standalone display mode, so a phone offers "Add to home screen". There is no
+service worker, so it does not cache and does not work offline — worth knowing,
+because a fishing spot is usually where the signal is worst.
 
 ### Tests
 
-Two Vitest projects, split by extension so a new file lands in the right one by
-being named for what it is:
+Three Vitest projects, split by location and extension so a new file lands in
+the right one by being named and placed for what it is:
 
-- `*.test.ts` — **domain**, in `node`. The scoring and tide maths are pure, and
-  giving them a DOM would only slow them down.
+- `src/domain/*.test.ts`, `src/api/*.test.ts` — **domain**, in `node`. The
+  scoring and tide maths are pure, and giving them a DOM would only slow them
+  down.
 - `*.test.tsx` — **components**, in `jsdom`, with React Testing Library.
   `src/test/setup.ts` adds the matchers, unmounts between tests, and stubs the
   `ResizeObserver` the charts build unconditionally — jsdom ships none.
+- `src/lib/*.test.ts`, `src/app/api/**/*.test.ts` — **server**, in `node`, with
+  a real database behind it.
 
 Run one project on its own with `npx vitest run --project domain`.
+
+The route handlers are tested by calling them, not over a socket: a handler
+reads nothing but its `Request`, so there is no server to start and no port to
+pick. `TIDELINE_DB=:memory:` gives each test a throwaway store through the same
+override the app itself supports.
+
+Vitest has its own `vitest.config.ts`. Next builds with Turbopack and ships no
+Vite config to share, so the two no longer meet.
 
 ### Storybook
 
@@ -38,9 +58,14 @@ The toolbar's **Theme** control stamps `data-theme` on the document element,
 which is how the app itself switches between the dark and daylight palettes.
 Both are worth checking: the tone colours are defined separately for each.
 
-`.storybook/main.ts` reuses `vite.config.ts` and strips the PWA plugin out of
-it — left in, it tries to precache Storybook's own manager bundle and fails on
-the workbox size limit.
+`.storybook/main.ts` uses the React/Vite framework rather than the Next one,
+and builds with Storybook's own Vite config. Every story renders a leaf
+component and none of them touch `next/*` — the single `next/dynamic` call
+wraps SpotMap from `src/app/App.tsx`, above the layer stories exercise. The
+Next preset would buy nothing there and costs something real: it aliases
+modules through `sb-original`, which `stories.smoke.test.tsx` cannot resolve,
+because portable stories run under plain Vitest with no Storybook builder in
+front of them.
 
 `stories.smoke.test.tsx` renders every story through the real preview
 decorators as part of `npm test`, so a story that throws on mount fails the
@@ -98,8 +123,59 @@ Hard gates override everything: over 30 kn of wind or 3 m of swell caps the scor
 at 20 and flags the hour unfishable. Every factor's contribution is shown in the
 UI, so the number is never a black box.
 
+## Asking about a spot
+
+Under the tables there is a panel that answers questions about the spot on
+screen — "is it worth going now", "when is the best window", "why is the score
+54". It is Claude (`claude-sonnet-5`), and it answers from the forecast the page
+is already showing: `buildChatContext` in `src/domain/chatContext.ts` renders
+the current reading, the score's own factor breakdown, every hour to the
+horizon, the tide turns and the windows as plain text, all from the same domain
+functions the screen is drawn with. It makes no second request, so the panel
+cannot quote a number the page disagrees with.
+
+**The key never reaches the page.** The renderer posts to `POST /api/chat` and
+`src/lib/chat.ts` is the only thing that talks to Anthropic, streaming the reply
+back as plain text through a `ReadableStream`. The first chunk is awaited before
+the response is built, so a failure that happens before any text exists is still
+a JSON error with a status rather than a 200 carrying an apology in its body.
+
+### Turning it on
+
+Set `ANTHROPIC_API_KEY` in the environment and the panel appears; leave it unset
+and it does not, the way the saved-spot library disappears in a build with no
+server:
+
+| | Chat | Why |
+|---|---|---|
+| `npm run dev` / `npm start` locally | yes | Your machine, your key. |
+| A public deploy | **no** | The key would be ours and every visitor's question would be billed to it. Enabling this means accepting that, and adding rate limiting first. |
+
+There is no build-time switch: both routes read the key through
+`anthropicFromEnv` at request time, so "is the panel in this build" has one
+answer rather than two that can drift. Deploy without the variable set and
+`GET /api/chat` reports `available: false`, which is enough for the renderer to
+leave the panel out and never request its chunk.
+
+### What it costs
+
+Nothing until somebody asks; there are no background calls. Each question sends
+the system prompt plus the forecast (roughly 2,000–4,000 tokens) and gets a few
+hundred back, at Sonnet 5's rates. The forecast sits behind a
+`cache_control: {type: 'ephemeral'}` breakpoint and the prompt ahead of it holds
+no clock or spot, so follow-ups about the same spot re-read the prefix from
+cache instead of paying for it again — which is why `buildChatContext` is tested
+for being a stable function of its input and not of the minute hand. `max_tokens`
+is capped at 4,000 and effort is `low`; the transcript is capped at ten
+exchanges, and picking a different spot starts over. **Set a monthly spend limit
+in the Anthropic Console** — that is the backstop none of the above replaces.
+
 ## Known limits
 
+- **Answers are Claude reading the same forecast you are**, and it can be wrong
+  about what it reads. Every limit below is in the system prompt, but a written
+  caveat is not a guarantee. Nothing in the panel knows your boat, your gear, or
+  the ground you are standing on.
 - **Tides are modelled globally, not taken from Australian tide tables.** Turn
   times can be 20–40 minutes out. Heights are relative to mean sea level, not the
   chart datum BOM publishes against, so they do not compare directly. Moving to
@@ -113,44 +189,6 @@ UI, so the number is never a black box.
   spot costs 2–3 requests, or 2 once the snap is cached.
 
 Check BOM before heading out.
-
-## Desktop build
-
-The same renderer ships as a Windows app via Electron.
-
-```bash
-npm run app:dev    # build + launch the desktop window
-npm run app:exe    # portable single-file exe -> release/Tideline-1.0.0-portable.exe
-```
-
-The result is one ~100 MB executable that runs on double click — no install, no
-registry writes, no admin. Electron bundles its own Chromium, which is where
-almost all of that size goes; Tauri would produce ~6 MB using the WebView2
-runtime Windows already ships, at the cost of a Rust and MSVC toolchain.
-
-Three things are worth knowing if you touch this:
-
-**The app is served over a custom `app://` scheme, not `file://`.** A `file://`
-page has an opaque origin and loses `localStorage`, which is where the
-ocean-snap cache lives. Registering a standard, secure scheme in `main.cjs`
-gives the renderer an ordinary web origin, so storage, fetch and relative URLs
-behave exactly as they do in the browser build.
-
-**The desktop build drops the service worker.** `vite build --mode electron`
-skips the PWA plugin and writes to `dist-app/` with relative asset paths. A
-caching service worker on top of a local scheme only adds staleness.
-
-**`ELECTRON_RUN_AS_NODE` breaks `electron .`** Electron-based editors — VS Code,
-and Claude Code running inside it — export that variable into their integrated
-terminals. Electron honours it and boots as bare Node, so `require('electron')`
-returns a path string and the app dies on `app.getPath`. `npm run app:dev` goes
-through `electron/launch.cjs`, which clears the variable for the child process.
-If you ever run `npx electron .` by hand and see `Cannot read properties of
-undefined (reading 'getPath')`, that is what happened.
-
-One packaging note: **stop the Vite dev server before `npm run app:exe`.** Its
-file watcher holds handles under the project and electron-builder fails with
-`EPERM ... rename 'win-unpacked.tmp'` while unpacking.
 
 ## Design
 
@@ -185,13 +223,15 @@ which would stretch x and y independently and squash every label.
 
 ```
 src/
-  api/        Open-Meteo clients, response types, ocean snapping
-  domain/     tides, scoring, timeline merge, phrasing, formatting  (pure, unit-tested)
-  components/ map, verdict, readout, charts, tables  (+ .test.tsx, .stories.tsx)
-  hooks/      useConditions (snap -> marine + forecast), useNow, useElementWidth
+  app/        layout, page, providers, App  +  api/ route handlers  (spots, chat)
+  lib/        the server half: spot store, db handle, chat, request/response edges
+  api/        Open-Meteo clients, response types, ocean snapping, chat client
+  domain/     tides, scoring, timeline merge, phrasing, chat context, URL parsing  (pure, unit-tested)
+  components/ map, verdict, readout, charts, tables, ask panel  (+ .test.tsx, .stories.tsx)
+  hooks/      useConditions (snap -> marine + forecast), useChat, useNow, useElementWidth
   fixtures/   sample conditions shared by tests and stories
   test/       jsdom setup for the component project
-.storybook/   Storybook config, reusing vite.config.ts
+.storybook/   Storybook config
 ```
 
 Timezones are handled explicitly: the API returns wall-clock stamps in the

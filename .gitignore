@@ -8,7 +8,10 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-dist
+.next
+next-env.d.ts
+*.tsbuildinfo
+storybook-static
 dist-ssr
 *.local
 
@@ -23,12 +26,13 @@ dist-ssr
 *.sln
 *.sw?
 
-# Desktop build
-dist-app
-release
 
 # Claude Code local overrides (personal, not shared)
 .claude/settings.local.json
 
 # Local spot store (personal data, not shared)
-server/data
+.data
+
+# Local env (MONGODB_URI, ANTHROPIC_API_KEY)
+.env
+.env*.local

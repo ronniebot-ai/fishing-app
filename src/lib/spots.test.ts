@@ -4,13 +4,14 @@
  * middle of the list reuses that number rather than leaving a hole.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from './db.cjs';
-import { createSpot, deleteSpot, listSpots, renameSpot } from './spots.cjs';
+import type { DatabaseSync } from 'node:sqlite';
+import { openDb } from './db';
+import { createSpot, deleteSpot, listSpots, renameSpot } from './spots';
 
 const BONDI = { lat: -33.8908, lon: 151.2743 };
 const MANLY = { lat: -33.7969, lon: 151.2873 };
 
-let db;
+let db: DatabaseSync;
 
 beforeEach(() => {
   db = openDb(':memory:');
