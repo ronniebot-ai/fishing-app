@@ -17,8 +17,8 @@ export interface SavedSpots {
   /** Why the last save was refused — usually that the spot is already kept. */
   saveError: Error | null;
   save: (spot: LatLon, name?: string) => void;
-  rename: (id: number, name: string) => void;
-  remove: (id: number) => void;
+  rename: (id: string, name: string) => void;
+  remove: (id: string) => void;
 }
 
 /**
@@ -47,12 +47,12 @@ export function useSavedSpots(): SavedSpots {
   });
 
   const renameMutation = useMutation({
-    mutationFn: ({ id, name }: { id: number; name: string }) => renameSpot(id, name),
+    mutationFn: ({ id, name }: { id: string; name: string }) => renameSpot(id, name),
     onSuccess: refresh,
   });
 
   const removeMutation = useMutation({
-    mutationFn: (id: number) => deleteSpot(id),
+    mutationFn: (id: string) => deleteSpot(id),
     onSuccess: refresh,
   });
 
@@ -68,7 +68,7 @@ export function useSavedSpots(): SavedSpots {
     saving: saveMutation.isPending,
     saveError: saveMutation.error,
     save: useCallback((spot: LatLon, name?: string) => saveFn({ spot, name }), [saveFn]),
-    rename: useCallback((id: number, name: string) => renameFn({ id, name }), [renameFn]),
-    remove: useCallback((id: number) => removeFn(id), [removeFn]),
+    rename: useCallback((id: string, name: string) => renameFn({ id, name }), [renameFn]),
+    remove: useCallback((id: string) => removeFn(id), [removeFn]),
   };
 }

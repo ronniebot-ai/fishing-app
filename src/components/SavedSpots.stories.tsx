@@ -49,7 +49,8 @@ export const LongName: Story = {
 export const Many: Story = {
   args: {
     spots: Array.from({ length: 12 }, (_, i) => ({
-      id: i + 1,
+      // Shaped like the ObjectId hex the store hands out.
+      id: `65f0a1b2c3d4e5f6000000${String(i + 1).padStart(2, '0')}`,
       name: i % 3 === 0 ? `Spot ${i + 1}` : `Ledge ${i + 1}`,
       lat: -33.8 - i * 0.05,
       lon: 151.27 + i * 0.01,

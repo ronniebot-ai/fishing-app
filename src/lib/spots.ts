@@ -1,9 +1,10 @@
-import type { DatabaseSync } from 'node:sqlite';
+import { ObjectId, type Collection, type Db } from 'mongodb';
+import { SPOTS } from './indexes';
 
 /**
  * Everything that touches the store lives here, so the HTTP layer above it
- * stays a thin translation of status codes and the storage driver below it has
- * exactly one caller.
+ * stays a thin translation of status codes and the driver below it has exactly
+ * one caller.
  */
 
 /** Long enough for "Boat ramp, north side of the breakwall". */
@@ -12,21 +13,33 @@ export const NAME_MAX = 60;
 /** Auto-generated names count from 1: "Spot 1", "Spot 2", ... */
 const DEFAULT_NAME = /^Spot (\d+)$/;
 
-/** The wire shape. `created_at` becomes `createdAt` in `toSpot` and nowhere else. */
+/** A spot id on the wire: the hex form of an ObjectId. */
+const ID = /^[0-9a-f]{24}$/i;
+
+/** The wire shape. Nothing outside this file sees an ObjectId or a Date. */
 export interface Spot {
-  id: number;
+  id: string;
   name: string;
   lat: number;
   lon: number;
   createdAt: number;
 }
 
-interface SpotRow {
-  id: number;
+interface SpotDoc {
+  _id: ObjectId;
   name: string;
   lat: number;
   lon: number;
-  created_at: number;
+  /**
+   * The same point again, as GeoJSON, because `$geoNear` cannot read a pair of
+   * loose fields and a 2dsphere index cannot be built over them. Written from
+   * the start so the nearby-spots work has nothing to backfill.
+   *
+   * GeoJSON is [longitude, latitude]. That order is the usual way to get this
+   * wrong, which is why `toSpot` and this file are the only places it appears.
+   */
+  location: { type: 'Point'; coordinates: [number, number] };
+  createdAt: Date;
 }
 
 /** An error the route layer can turn straight into a response. */
@@ -40,8 +53,18 @@ export class SpotError extends Error {
   }
 }
 
-function toSpot(row: SpotRow): Spot {
-  return { id: row.id, name: row.name, lat: row.lat, lon: row.lon, createdAt: row.created_at };
+export function spots(db: Db): Collection<SpotDoc> {
+  return db.collection<SpotDoc>(SPOTS);
+}
+
+function toSpot(doc: SpotDoc): Spot {
+  return {
+    id: doc._id.toHexString(),
+    name: doc.name,
+    lat: doc.lat,
+    lon: doc.lon,
+    createdAt: doc.createdAt.getTime(),
+  };
 }
 
 /**
@@ -49,8 +72,8 @@ function toSpot(row: SpotRow): Spot {
  * a server cannot trust its client.
  *
  * Coordinates are rounded to the 4 decimal places the map already hands out,
- * which is what makes UNIQUE (lat, lon) mean "the same spot" rather than "the
- * same float".
+ * which is what makes the unique index on (lat, lon) mean "the same spot"
+ * rather than "the same float".
  */
 function readCoords(body: unknown): { lat: number; lon: number } {
   const source = body as { lat?: unknown; lon?: unknown } | null | undefined;
@@ -72,10 +95,14 @@ function readName(value: unknown): string {
   return value.trim().slice(0, NAME_MAX);
 }
 
-function readId(value: unknown): number {
-  const id = Number(value);
-  if (!Number.isInteger(id) || id < 1) throw new SpotError(400, 'Bad spot id.');
-  return id;
+function readId(value: unknown): ObjectId {
+  if (typeof value !== 'string' || !ID.test(value)) throw new SpotError(400, 'Bad spot id.');
+  return new ObjectId(value);
+}
+
+/** The write that lost a race against the unique index on (lat, lon). */
+function isDuplicate(err: unknown): boolean {
+  return (err as { code?: number } | null)?.code === 11000;
 }
 
 /**
@@ -85,10 +112,11 @@ function readId(value: unknown): number {
  * three, the next save is Spot 2 again. A user who never renames anything gets
  * a short, stable set of numbers instead of a counter that climbs forever.
  */
-function nextDefaultName(db: DatabaseSync): string {
+async function nextDefaultName(db: Db): Promise<string> {
   const taken = new Set<number>();
-  for (const row of db.prepare('SELECT name FROM spots').all() as unknown as { name: string }[]) {
-    const match = DEFAULT_NAME.exec(row.name);
+  const cursor = spots(db).find({}, { projection: { name: 1 } });
+  for await (const doc of cursor) {
+    const match = DEFAULT_NAME.exec(doc.name);
     if (match) taken.add(Number(match[1]));
   }
   let n = 1;
@@ -96,55 +124,70 @@ function nextDefaultName(db: DatabaseSync): string {
   return `Spot ${n}`;
 }
 
-export function listSpots(db: DatabaseSync): Spot[] {
-  return (
-    db.prepare('SELECT * FROM spots ORDER BY created_at, id').all() as unknown as SpotRow[]
-  ).map(toSpot);
+export async function listSpots(db: Db): Promise<Spot[]> {
+  const docs = await spots(db)
+    .find()
+    .sort({ createdAt: 1, _id: 1 })
+    .toArray();
+  return docs.map(toSpot);
 }
 
-export function createSpot(db: DatabaseSync, body: unknown): Spot {
+/**
+ * The 409 comes from the unique index rather than from a check before the
+ * write, so two saves of the same point cannot both get through the gap
+ * between looking and inserting.
+ *
+ * The SQLite version wrapped all of this in BEGIN IMMEDIATE, which took a
+ * write lock over the whole database and so also serialised the name scan.
+ * MongoDB has no equivalent: a transaction here would isolate reads but would
+ * not stop two concurrent unnamed saves from both landing on "Spot 1", because
+ * they write different documents and never conflict. It would look like a
+ * guarantee without being one, so there is none. The coordinate is still
+ * absolutely unique; the auto-name is best effort, and a duplicate one is
+ * cosmetic and renameable.
+ */
+export async function createSpot(db: Db, body: unknown): Promise<Spot> {
   const { lat, lon } = readCoords(body);
   let name = readName((body as { name?: unknown } | null | undefined)?.name);
+  if (!name) name = await nextDefaultName(db);
 
-  // One transaction, because the name is picked from the same rows the insert
-  // lands among: two saves in flight at once must not both become "Spot 1".
-  db.exec('BEGIN IMMEDIATE');
+  const doc: SpotDoc = {
+    _id: new ObjectId(),
+    name,
+    lat,
+    lon,
+    location: { type: 'Point', coordinates: [lon, lat] },
+    createdAt: new Date(),
+  };
+
   try {
-    const clash = db.prepare('SELECT * FROM spots WHERE lat = ? AND lon = ?').get(lat, lon) as
-      | SpotRow
-      | undefined;
-    if (clash) throw new SpotError(409, `Already saved as ${clash.name}.`);
-
-    if (!name) name = nextDefaultName(db);
-    const { lastInsertRowid } = db
-      .prepare('INSERT INTO spots (name, lat, lon, created_at) VALUES (?, ?, ?, ?)')
-      .run(name, lat, lon, Date.now());
-
-    const row = db
-      .prepare('SELECT * FROM spots WHERE id = ?')
-      .get(Number(lastInsertRowid)) as unknown as SpotRow;
-    db.exec('COMMIT');
-    return toSpot(row);
+    await spots(db).insertOne(doc);
   } catch (err) {
-    db.exec('ROLLBACK');
-    throw err;
+    if (!isDuplicate(err)) throw err;
+    const clash = await spots(db).findOne({ lat, lon });
+    throw new SpotError(409, `Already saved as ${clash?.name ?? 'another spot'}.`);
   }
+
+  return toSpot(doc);
 }
 
-export function renameSpot(db: DatabaseSync, rawId: unknown, body: unknown): Spot {
+export async function renameSpot(db: Db, rawId: unknown, body: unknown): Promise<Spot> {
   const id = readId(rawId);
   const name = readName((body as { name?: unknown } | null | undefined)?.name);
   // Clearing a name is not how you get the default back; delete and save again.
   if (!name) throw new SpotError(400, 'name cannot be empty.');
 
-  const { changes } = db.prepare('UPDATE spots SET name = ? WHERE id = ?').run(name, id);
-  if (Number(changes) === 0) throw new SpotError(404, 'No such spot.');
+  const doc = await spots(db).findOneAndUpdate(
+    { _id: id },
+    { $set: { name } },
+    { returnDocument: 'after' },
+  );
+  if (!doc) throw new SpotError(404, 'No such spot.');
 
-  return toSpot(db.prepare('SELECT * FROM spots WHERE id = ?').get(id) as unknown as SpotRow);
+  return toSpot(doc);
 }
 
-export function deleteSpot(db: DatabaseSync, rawId: unknown): void {
-  const id = readId(rawId);
-  const { changes } = db.prepare('DELETE FROM spots WHERE id = ?').run(id);
-  if (Number(changes) === 0) throw new SpotError(404, 'No such spot.');
+export async function deleteSpot(db: Db, rawId: unknown): Promise<void> {
+  const { deletedCount } = await spots(db).deleteOne({ _id: readId(rawId) });
+  if (deletedCount === 0) throw new SpotError(404, 'No such spot.');
 }

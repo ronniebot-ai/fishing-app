@@ -7,7 +7,8 @@ import type { LatLon } from './types';
  * pressing Save puts one in here.
  */
 export interface SavedSpot extends LatLon {
-  id: number;
+  /** The hex form of the store's ObjectId. Opaque to the app. */
+  id: string;
   name: string;
   /** Epoch ms, used only to keep the list in the order they were saved. */
   createdAt: number;
@@ -49,14 +50,14 @@ export function createSpot(spot: LatLon, name?: string): Promise<SavedSpot> {
   });
 }
 
-export function renameSpot(id: number, name: string): Promise<SavedSpot> {
+export function renameSpot(id: string, name: string): Promise<SavedSpot> {
   return request<SavedSpot>(`/api/spots/${id}`, {
     method: 'PATCH',
     body: JSON.stringify({ name }),
   });
 }
 
-export function deleteSpot(id: number): Promise<void> {
+export function deleteSpot(id: string): Promise<void> {
   return request<void>(`/api/spots/${id}`, { method: 'DELETE' });
 }
 

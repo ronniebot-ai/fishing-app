@@ -40,8 +40,9 @@ Run one project on its own with `npx vitest run --project domain`.
 
 The route handlers are tested by calling them, not over a socket: a handler
 reads nothing but its `Request`, so there is no server to start and no port to
-pick. `TIDELINE_DB=:memory:` gives each test a throwaway store through the same
-override the app itself supports.
+pick. The store runs against a real `mongod` in memory, with the same indexes
+the cluster gets — one of them, the unique index over `(lat, lon)`, is not an
+optimisation but the thing that produces the 409.
 
 Vitest has its own `vitest.config.ts`. Next builds with Turbopack and ships no
 Vite config to share, so the two no longer meet.
@@ -70,6 +71,39 @@ front of them.
 `stories.smoke.test.tsx` renders every story through the real preview
 decorators as part of `npm test`, so a story that throws on mount fails the
 suite rather than waiting to be opened.
+
+## The spot library
+
+Saved spots live in MongoDB Atlas. The store is four operations wide and all of
+them are in `src/lib/spots.ts`; `src/app/api/spots/**` translates their errors
+into status codes and does nothing else.
+
+Two things about it are worth knowing.
+
+**The 409 comes from a unique index over `(lat, lon)`, not from a check before
+the write.** Coordinates are rounded to the 4 decimal places the map hands out
+first, which is what makes "the same spot" mean the same spot rather than the
+same float. Because the index is the authority, two saves of the same point
+cannot both get through the gap between looking and inserting.
+
+**The auto-name is best effort, and deliberately so.** An unnamed spot is given
+the lowest free number rather than the next one, so deleting Spot 2 of three
+frees that number for the next save. The SQLite version this replaced wrapped
+the scan and the insert in `BEGIN IMMEDIATE`, which locked the whole database
+and so serialised them. MongoDB has no equivalent: a transaction would isolate
+the reads but would not stop two simultaneous unnamed saves from both choosing
+"Spot 1", because they write different documents and never conflict. It would
+look like a guarantee without being one, so there is none. The coordinate is
+still absolutely unique; a duplicate number is cosmetic and renameable.
+
+Each spot also carries its position a second time as a GeoJSON point, indexed
+with `2dsphere`. Nothing reads it yet — it is there so the nearby-spots query
+has no backfill in front of it.
+
+```bash
+cp .env.example .env.local   # fill in MONGODB_URI
+npm run db:indexes           # once per cluster
+```
 
 ## How it works
 

@@ -30,9 +30,6 @@ dist-ssr
 # Claude Code local overrides (personal, not shared)
 .claude/settings.local.json
 
-# Local spot store (personal data, not shared)
-.data
-
 # Local env (MONGODB_URI, ANTHROPIC_API_KEY)
 .env
 .env*.local

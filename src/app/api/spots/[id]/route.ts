@@ -1,4 +1,4 @@
-import { getDb } from '../../../../lib/db';
+import { getDb } from '../../../../lib/mongo';
 import { errorResponse, readJson } from '../../../../lib/http';
 import { deleteSpot, renameSpot } from '../../../../lib/spots';
 
@@ -13,7 +13,7 @@ export async function PATCH(request: Request, { params }: Context): Promise<Resp
   try {
     const { id } = await params;
     const body = await readJson(request, BODY_LIMIT);
-    return Response.json(renameSpot(getDb(), id, body));
+    return Response.json(await renameSpot(await getDb(), id, body));
   } catch (err) {
     return errorResponse(err);
   }
@@ -22,7 +22,7 @@ export async function PATCH(request: Request, { params }: Context): Promise<Resp
 export async function DELETE(_request: Request, { params }: Context): Promise<Response> {
   try {
     const { id } = await params;
-    deleteSpot(getDb(), id);
+    await deleteSpot(await getDb(), id);
     return new Response(null, { status: 204 });
   } catch (err) {
     return errorResponse(err);
