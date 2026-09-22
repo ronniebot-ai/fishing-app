@@ -3,7 +3,7 @@ import type { Decorator, Preview } from '@storybook/react-vite';
 // :root, so a story renders unstyled unless both sheets are loaded here.
 // SpotMap brings Leaflet's own stylesheet with it.
 import '../src/index.css';
-import '../src/App.css';
+import '../src/app/App.css';
 
 /**
  * Mirror the app's theme switch.

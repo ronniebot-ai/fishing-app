@@ -1,3 +1,4 @@
+import { request } from './request';
 import type { LatLon } from './types';
 
 /**
@@ -7,41 +8,11 @@ import type { LatLon } from './types';
  * pressing Save puts one in here.
  */
 export interface SavedSpot extends LatLon {
-  id: number;
+  /** The hex form of the store's ObjectId. Opaque to the app. */
+  id: string;
   name: string;
   /** Epoch ms, used only to keep the list in the order they were saved. */
   createdAt: number;
-}
-
-/**
- * Dev and web builds are served from the same origin as the API, so a relative
- * path finds it. The desktop build is on `app://`, and is pointed at the
- * loopback server the Electron main process starts — see `.env.electron`.
- */
-const BASE: string = import.meta.env.VITE_API_BASE ?? '';
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
-  });
-
-  // DELETE answers 204, which has no body to parse.
-  if (res.status === 204) return undefined as T;
-
-  let body: unknown = null;
-  try {
-    body = await res.json();
-  } catch {
-    // Not JSON — a proxy or a static host answering instead of the API.
-  }
-
-  if (!res.ok) {
-    // The API reports failures as {error: "..."}, written to be shown as-is.
-    const reason = (body as { error?: string } | null)?.error;
-    throw new Error(reason ?? `Could not reach the spot list (HTTP ${res.status}).`);
-  }
-  return body as T;
 }
 
 export function listSpots(signal?: AbortSignal): Promise<SavedSpot[]> {
@@ -56,14 +27,14 @@ export function createSpot(spot: LatLon, name?: string): Promise<SavedSpot> {
   });
 }
 
-export function renameSpot(id: number, name: string): Promise<SavedSpot> {
+export function renameSpot(id: string, name: string): Promise<SavedSpot> {
   return request<SavedSpot>(`/api/spots/${id}`, {
     method: 'PATCH',
     body: JSON.stringify({ name }),
   });
 }
 
-export function deleteSpot(id: number): Promise<void> {
+export function deleteSpot(id: string): Promise<void> {
   return request<void>(`/api/spots/${id}`, { method: 'DELETE' });
 }
 

@@ -71,7 +71,7 @@ describe('SavedSpots', () => {
       await user.clear(screen.getByLabelText('Rename The wall'));
       await user.type(screen.getByLabelText('Rename The wall'), 'North wall{Enter}');
 
-      expect(onRename).toHaveBeenCalledWith(3, 'North wall');
+      expect(onRename).toHaveBeenCalledWith(savedSpots[2].id, 'North wall');
     });
 
     it('leaves the name alone when the field is emptied', async () => {
@@ -107,7 +107,7 @@ describe('SavedSpots', () => {
       expect(onRemove).not.toHaveBeenCalled();
 
       await user.click(screen.getByRole('button', { name: 'Sure?' }));
-      expect(onRemove).toHaveBeenCalledWith(3);
+      expect(onRemove).toHaveBeenCalledWith(savedSpots[2].id);
     });
 
     it('forgets it was asked once focus moves away', async () => {

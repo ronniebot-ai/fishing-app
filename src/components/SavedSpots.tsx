@@ -8,8 +8,8 @@ interface SavedSpotsProps {
   /** The spot the readings are currently for, saved or not. */
   selected: LatLon | null;
   onSelect: (spot: SavedSpot) => void;
-  onRename: (id: number, name: string) => void;
-  onRemove: (id: number) => void;
+  onRename: (id: string, name: string) => void;
+  onRemove: (id: string) => void;
 }
 
 /**
@@ -21,13 +21,13 @@ interface SavedSpotsProps {
  * it prevents, and the second press is right where the first one was.
  */
 export function SavedSpots({ spots, selected, onSelect, onRename, onRemove }: SavedSpotsProps) {
-  const [editing, setEditing] = useState<number | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
-  const [confirming, setConfirming] = useState<number | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
 
   if (spots.length === 0) return null;
 
-  const commit = (id: number) => {
+  const commit = (id: string) => {
     const name = draft.trim();
     // An empty field means "leave it alone", not "clear the name".
     if (name) onRename(id, name);

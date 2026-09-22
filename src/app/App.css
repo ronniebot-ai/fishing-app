@@ -1,0 +1,992 @@
+/* ---------------------------------------------------------------
+   Layout: a map rail and an instrument pane.
+
+   Sections are separated by rule and space, not by cards. Ant Design
+   supplies the machinery here — Table, Tabs, Alert, Skeleton — but
+   not its voice: no shadows anywhere, corners at 2px, and containers
+   graded by what they hold rather than one radius stamped on every
+   block. The spine is a full-bleed panel, the four readings are a
+   rule-separated band with no container at all, and only the two
+   tables sit in anything card-like.
+   --------------------------------------------------------------- */
+
+.app {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr;
+  height: 100%;
+}
+
+@media (min-width: 900px) {
+  .app {
+    grid-template-columns: minmax(280px, 30%) 1fr;
+    grid-template-rows: 1fr;
+  }
+}
+
+/* ---------- map ---------- */
+
+.map-rail {
+  position: relative;
+  min-height: 0;
+  border-bottom: 1px solid var(--rule);
+  /* Below 900px the map is a strip once a spot is chosen: full height is what
+     picking needs, and a line confirming which spot is what reading needs. */
+  height: 88px;
+  transition: height 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.app[data-map='open'] .map-rail {
+  height: 46vh;
+}
+
+@media (min-width: 900px) {
+  .map-rail {
+    height: auto;
+    border-bottom: none;
+    border-right: 1px solid var(--rule);
+  }
+
+  .app[data-map='open'] .map-rail {
+    height: auto;
+  }
+}
+
+.spot-chip {
+  position: absolute;
+  left: 14px;
+  bottom: 16px;
+  z-index: 500;
+  background: var(--ground);
+  border: 1px solid var(--rule);
+  padding: 6px 11px;
+  font-family: var(--cond);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dim);
+  pointer-events: none;
+  max-width: calc(100% - 150px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.map-toggle {
+  position: absolute;
+  right: 12px;
+  bottom: 14px;
+  z-index: 500;
+  appearance: none;
+  background: var(--ground);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  font-family: var(--cond);
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+@media (min-width: 900px) {
+  .map-toggle {
+    display: none;
+  }
+}
+
+/* Below 900px the rail doubles as a strip, and Leaflet's own furniture lands
+   on top of the two things the strip is for. The zoom buttons are useless at
+   88px tall, and the chip and the button both move clear of the attribution,
+   which has to stay visible whatever height the map is. */
+@media (max-width: 899px) {
+  .map-toggle {
+    top: 10px;
+    right: 10px;
+    bottom: auto;
+  }
+
+  .app[data-map='closed'] .leaflet-control-zoom {
+    display: none;
+  }
+
+  .app[data-map='closed'] .spot-chip {
+    top: 10px;
+    bottom: auto;
+    max-width: calc(100% - 150px);
+  }
+}
+
+/* ---------- instrument column ---------- */
+
+/* A container, so the readings below respond to this column's width rather
+   than the viewport's. On a wide screen the column can still be narrow, and a
+   viewport media query cannot see that. */
+.instrument {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 26px 46px;
+  container-type: inline-size;
+  container-name: instrument;
+}
+
+@media (max-width: 560px) {
+  .instrument {
+    padding: 16px 18px 40px;
+  }
+}
+
+/* ---------- masthead ---------- */
+
+.mast {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.mast h1 {
+  font-size: 20px;
+  letter-spacing: 0.015em;
+}
+
+.mast .when {
+  text-align: right;
+  line-height: 1.35;
+  font-size: 12.5px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.mast .when b {
+  display: block;
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+/* ---------- verdict ---------- */
+
+.verdict {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.verdict .word,
+.verdict .num {
+  font-family: var(--cond);
+  font-size: 32px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.verdict .word {
+  font-weight: 600;
+}
+
+.verdict .num {
+  font-weight: 400;
+  color: var(--dim);
+}
+
+/* The answer should dominate the page where there is room for it to. */
+@container instrument (min-width: 620px) {
+  .verdict .word,
+  .verdict .num {
+    font-size: 44px;
+  }
+}
+
+.verdict-sub {
+  color: var(--dim);
+  font-size: 14.5px;
+  margin: 6px 0 0;
+  max-width: 58ch;
+}
+
+.tone-prime { color: var(--good); }
+.tone-good { color: var(--curve-ink); }
+.tone-fair { color: var(--warn); }
+.tone-poor { color: var(--dim); }
+
+/* ---------- readings: a band, not four boxes ---------- */
+
+.readout {
+  margin-top: 24px;
+  border-top: 1px solid var(--rule);
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@container instrument (min-width: 620px) {
+  .readout {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.readout .row {
+  position: relative;
+  min-width: 0;
+  padding: 12px 16px 13px;
+  border-bottom: 1px solid var(--rule-soft);
+  border-right: 1px solid var(--rule-soft);
+}
+
+/* First in each row of the grid loses its inset; last loses its rule. */
+.readout .row:nth-child(2n + 1) {
+  padding-left: 0;
+}
+
+.readout .row:nth-child(2n) {
+  border-right: none;
+  padding-right: 0;
+}
+
+@container instrument (min-width: 620px) {
+  .readout .row:nth-child(2n + 1) {
+    padding-left: 16px;
+  }
+
+  .readout .row:nth-child(2n) {
+    border-right: 1px solid var(--rule-soft);
+    padding-right: 16px;
+  }
+
+  .readout .row:first-child {
+    padding-left: 0;
+  }
+
+  .readout .row:last-child {
+    border-right: none;
+    padding-right: 0;
+  }
+}
+
+.readout .k {
+  display: block;
+  color: var(--dim);
+  font-size: 13.5px;
+}
+
+.readout .v {
+  display: block;
+  margin-top: 1px;
+  line-height: 1.15;
+  font-family: var(--cond);
+  font-size: 25px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.readout .v u {
+  text-decoration: none;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--dim);
+  margin-left: 3px;
+}
+
+.readout .n {
+  display: block;
+  margin-top: 2px;
+  color: var(--dim);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/* Charts italicise water features; tide motion follows that convention. */
+.readout .n em {
+  font-style: italic;
+  color: var(--ink);
+}
+
+/* How much this reading contributes to the score, so the number is never a
+   black box. Sits on the row's own bottom rule and follows the cursor. */
+.readout .row::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  height: 1px;
+  background: var(--curve);
+  width: var(--contrib, 0%);
+  transition: width 0.18s ease;
+}
+
+.readout .row.is-missing .v {
+  font-size: 16px;
+  color: var(--dim);
+}
+
+/* ---------- the time spine ---------- */
+
+.spine-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin: 26px 0 4px;
+}
+
+.spine-head h2 {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.spine-head .cursor-time {
+  font-family: var(--cond);
+  font-size: 13px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.spine-holder {
+  position: relative;
+}
+
+.spine-holder svg {
+  display: block;
+}
+
+.spine-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--dim);
+  margin-top: 5px;
+}
+
+.spine-foot .now {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.legend {
+  display: flex;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+.legend i {
+  display: inline-block;
+  width: 15px;
+  height: 2.5px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+/* ---------- tables ---------- */
+
+.tables {
+  margin-top: 26px;
+  display: grid;
+  gap: 0 34px;
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+/* Set by App when it renders both tables rather than tabs, so the column count
+   can never disagree with what was actually rendered. */
+.tables[data-split='true'] {
+  grid-template-columns: 1fr 1fr;
+}
+
+h2.sec {
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0 0 8px;
+}
+
+/* antd's Table, wearing Tideline's clothes. Numbers inherit tabular figures
+   from here; the component tokens in src/theme/antdTheme.ts carry the colours
+   and padding, and these rules carry what is not a token. */
+.data-table {
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table .ant-table-thead > tr > th {
+  font-size: 12.5px;
+  font-weight: 400;
+  border-bottom: 1px solid var(--rule);
+}
+
+.data-table .ant-table-tbody > tr > td.cell-big {
+  font-family: var(--cond);
+  font-size: 17px;
+}
+
+.data-table .ant-table-tbody > tr > td.cell-score {
+  font-family: var(--cond);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.data-table .ant-table-tbody > tr.is-now > td {
+  color: var(--ink);
+}
+
+.data-table .ant-table-tbody > tr.is-now > td:first-child::before {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 12px;
+  background: var(--accent);
+  margin-right: 8px;
+  vertical-align: -1px;
+}
+
+.data-table .ant-table-placeholder td {
+  border-bottom: none;
+}
+
+
+
+/* ---------- notes & states ---------- */
+
+/* antd's Alert, reduced to the rule-and-tint the rest of the page uses. */
+.instrument .state {
+  margin-top: 18px;
+  padding: 9px 0 9px 12px;
+  border: none;
+  border-left: 2px solid var(--warn);
+  border-radius: 0;
+  background: transparent;
+  max-width: 66ch;
+}
+
+.instrument .state.ant-alert-error {
+  border-left-color: var(--bad);
+}
+
+.instrument .state .ant-alert-message {
+  color: var(--ink);
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.instrument .state .ant-alert-description {
+  color: var(--dim);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.instrument .gate {
+  margin-top: 12px;
+}
+
+.placeholder {
+  margin: 26px 0 0;
+  color: var(--dim);
+  font-size: 15px;
+  max-width: 44ch;
+  line-height: 1.65;
+}
+
+.placeholder b {
+  display: block;
+  font-family: var(--cond);
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 7px;
+}
+
+/* A table with nothing to list says so in a sentence, in place of the rows. */
+.empty {
+  margin: 0;
+  padding: 4px 0;
+  color: var(--dim);
+  font-size: 14px;
+  line-height: 1.6;
+  max-width: 56ch;
+  text-align: left;
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  margin-top: 26px;
+}
+
+.disclosure {
+  margin-top: 28px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+  font-size: 12.5px;
+  color: var(--dim);
+  max-width: 68ch;
+  line-height: 1.62;
+}
+
+/* Holds the tables' space while their chunk arrives. */
+.tables-loading {
+  margin-top: 26px;
+}
+
+/* ---------- saved spots ----------
+
+   The library sits between the masthead and the verdict, so it is bounded:
+   the readings are what the pane is for and a long list must not push them
+   off the fold. Rows are rule-separated, like every other list here, and the
+   two text inputs are the only ones in the app — they borrow the map
+   button's shape rather than inventing a second one. */
+
+.spots {
+  margin-top: 14px;
+}
+
+.save-spot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.save-spot input {
+  flex: 1 1 180px;
+  min-width: 0;
+  appearance: none;
+  background: var(--ground);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  font-family: var(--cond);
+  font-size: 12.5px;
+  padding: 6px 9px;
+}
+
+.save-spot input::placeholder {
+  color: var(--dim);
+}
+
+.save-spot input:focus-visible,
+.saved-spots input:focus-visible {
+  outline: none;
+  border-color: var(--curve);
+}
+
+.save-spot button,
+.saved-spots button {
+  appearance: none;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  font-family: var(--cond);
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 6px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.save-spot button[type='submit'] {
+  border-color: var(--curve);
+  color: var(--curve-ink);
+}
+
+.save-spot button:disabled {
+  color: var(--dim);
+  border-color: var(--rule);
+  cursor: default;
+}
+
+.save-error {
+  flex-basis: 100%;
+  font-family: var(--cond);
+  font-size: 12.5px;
+  color: var(--warn);
+}
+
+/* Already kept: a statement, not a control. */
+.save-spot.kept {
+  margin: 0;
+  gap: 7px;
+  font-family: var(--cond);
+  font-size: 12.5px;
+  color: var(--dim);
+}
+
+.save-spot .kept-name {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.saved-spots {
+  margin-top: 16px;
+}
+
+.saved-spots h2 {
+  font-family: var(--cond);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dim);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.saved-spots ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  /* Roughly five rows, then it scrolls: the readings keep the fold. */
+  max-height: 168px;
+  overflow-y: auto;
+}
+
+.saved-spots li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.saved-spots .go {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  border: none;
+  padding: 3px 0;
+  text-align: left;
+}
+
+.saved-spots .go .name {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved-spots .go .at {
+  font-size: 12px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The spot being read carries the annotation colour, matching its map pin. */
+.saved-spots li[data-current='true'] .go .name {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.saved-spots .edit,
+.saved-spots .drop {
+  border: none;
+  color: var(--dim);
+  padding: 4px 6px;
+}
+
+.saved-spots .edit:hover,
+.saved-spots .drop:hover {
+  color: var(--ink);
+}
+
+/* Second press removes it, so the word has to change with the meaning. */
+.saved-spots .drop:focus-visible,
+.saved-spots .drop:hover {
+  color: var(--bad);
+}
+
+.saved-spots .rename {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.saved-spots .rename input {
+  flex: 1;
+  min-width: 0;
+  appearance: none;
+  background: var(--ground);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  font-family: var(--sans);
+  font-size: 14px;
+  padding: 4px 8px;
+}
+
+/* ---------- ask ----------
+
+   A conversation, not a chat window: no bubbles, no avatars, no scrolling
+   box of its own. Turns are stacked in the pane's own flow and separated by
+   the same rules as every other list here, so the answer reads as more of
+   the page rather than as a widget dropped onto it.
+
+   It sits above the verdict, so its own spacing comes entirely from the
+   section heading — the same 26px every other heading in this pane gets,
+   rather than a second margin stacked on top of it. */
+
+.chat {
+  margin-top: 0;
+}
+
+.chat-log {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  max-width: 68ch;
+}
+
+.chat-log .turn {
+  padding: 10px 0;
+  border-top: 1px solid var(--rule-soft);
+}
+
+.chat-log .turn:first-child {
+  border-top: none;
+}
+
+.chat-log .who {
+  display: block;
+  font-family: var(--cond);
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 3px;
+}
+
+.chat-log .said {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.62;
+  /* The model writes paragraphs; nothing here interprets them further. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The user's own words sit quieter than the answer they asked for. */
+.chat-log .turn.user .said {
+  color: var(--dim);
+}
+
+.chat-openers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.chat-openers button {
+  appearance: none;
+  background: transparent;
+  color: var(--dim);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  font-family: var(--cond);
+  font-size: 12.5px;
+  padding: 5px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.chat-openers button:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--curve);
+}
+
+.chat-openers button:disabled {
+  cursor: default;
+}
+
+.chat-ask {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  max-width: 68ch;
+}
+
+.chat-ask textarea {
+  flex: 1 1 220px;
+  min-width: 0;
+  appearance: none;
+  resize: vertical;
+  background: var(--ground);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  font-family: var(--sans);
+  font-size: 13.5px;
+  line-height: 1.5;
+  padding: 7px 9px;
+}
+
+.chat-ask textarea::placeholder {
+  color: var(--dim);
+}
+
+.chat-ask textarea:focus-visible {
+  outline: none;
+  border-color: var(--curve);
+}
+
+.chat-ask button {
+  appearance: none;
+  background: transparent;
+  color: var(--curve-ink);
+  border: 1px solid var(--curve);
+  border-radius: 2px;
+  font-family: var(--cond);
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 7px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.chat-ask button:disabled {
+  color: var(--dim);
+  border-color: var(--rule);
+  cursor: default;
+}
+
+.chat-note {
+  margin-top: 12px;
+  font-family: var(--cond);
+  font-size: 12px;
+  color: var(--dim);
+  max-width: 68ch;
+  line-height: 1.6;
+}
+
+/* ------------------------------------------------------------------
+   Spot history
+
+   Everything above this is about the next two days. This block is about
+   the place, which is the only thing on the page that needs the app to
+   have been paying attention over time.
+   ------------------------------------------------------------------ */
+.history {
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 1px solid var(--rule);
+}
+
+.history h3 {
+  font-family: var(--cond);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--dim);
+  margin: 20px 0 4px;
+}
+
+.history-sub {
+  color: var(--dim);
+  font-size: 14.5px;
+  margin: 0 0 12px;
+  max-width: 58ch;
+}
+
+.history-sub b {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* One bar per hour of the day. The shape is the whole message — dawn spots
+   and sea-breeze spots look different at a glance — so the only axis is four
+   anchors underneath it. */
+.hours {
+  display: grid;
+  grid-template-columns: repeat(24, 1fr);
+  align-items: end;
+  gap: 2px;
+  height: 64px;
+}
+
+.hours .hour {
+  display: flex;
+  align-items: flex-end;
+  height: 100%;
+}
+
+.hours .hour i {
+  display: block;
+  width: 100%;
+  height: var(--h);
+  min-height: 1px;
+  background: currentColor;
+}
+
+/* An hour with nothing kept is a gap, not a calm one. */
+.hours .hour[data-empty] i {
+  height: 100%;
+  background: var(--rule-soft);
+}
+
+.hours-axis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin-top: 5px;
+  font-family: var(--cond);
+  font-size: 11.5px;
+  color: var(--dim);
+}
+
+.nearby {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nearby li + li {
+  border-top: 1px solid var(--rule-soft);
+}
+
+.nearby button {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  padding: 7px 0;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nearby button:hover .n {
+  text-decoration: underline;
+}
+
+.nearby .d,
+.nearby .s {
+  font-family: var(--cond);
+  font-variant-numeric: tabular-nums;
+}
+
+.nearby .d {
+  color: var(--dim);
+  font-size: 13.5px;
+}
+
+.nearby .s {
+  font-size: 16px;
+  min-width: 2.4ch;
+  text-align: right;
+}

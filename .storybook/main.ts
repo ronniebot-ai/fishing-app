@@ -1,36 +1,22 @@
 import type { StorybookConfig } from '@storybook/react-vite';
-import type { PluginOption } from 'vite';
 
 /**
- * Drop the PWA plugin from a config Storybook is about to build with.
+ * The React/Vite framework rather than the Next one, deliberately.
  *
- * `vite.config.ts` adds it for the web target, and Storybook reuses that file
- * wholesale. Left in, it tries to precache Storybook's own manager bundle and
- * fails the build on the 2 MiB workbox limit — and a service worker in the
- * preview iframe would serve stale stories besides.
+ * Every story renders a leaf component, and none of them touch `next/*` — the
+ * one `next/dynamic` call in the app wraps SpotMap from App.tsx, above the
+ * layer stories exercise. The Next preset would buy nothing for that and costs
+ * something real: it aliases modules through `sb-original`, which the portable
+ * stories in `stories.smoke.test.tsx` cannot resolve, because they run under
+ * plain Vitest with no Storybook builder in front of them.
  *
- * Filtering here rather than behind an env var in the npm script keeps this
- * true however Storybook is started, including a bare `npx storybook build`.
- */
-function withoutPwa(plugins: PluginOption[]): PluginOption[] {
-  return plugins.flatMap((plugin) => {
-    if (Array.isArray(plugin)) return [withoutPwa(plugin)];
-    if (plugin && 'name' in plugin && plugin.name.startsWith('vite-plugin-pwa')) return [];
-    return [plugin];
-  });
-}
-
-/**
- * Storybook otherwise reuses `vite.config.ts` as-is, so the renderer here is
- * built exactly the way the app is.
+ * Storybook builds with its own Vite config here. It used to inherit the app's
+ * and have the PWA plugin filtered back out; Next builds with Turbopack and
+ * ships no vite.config.ts, so there is nothing left to inherit or to strip.
  */
 const config: StorybookConfig = {
   framework: { name: '@storybook/react-vite', options: {} },
   stories: ['../src/**/*.stories.tsx'],
-  viteFinal: (config) => ({
-    ...config,
-    plugins: withoutPwa(config.plugins ?? []),
-  }),
 };
 
 export default config;

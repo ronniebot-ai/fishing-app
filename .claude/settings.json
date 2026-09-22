@@ -6,7 +6,8 @@
       "Bash(opencli browser *)",
       "Bash(opencli browser fish eval ' *)",
       "Bash(curl -s \"http://localhost:5199/src/App.css\")",
-      "Bash(cd \"C:/Users/Ronni/React/Fishing App\" && printf '\\\\n# Claude Code local overrides \\(personal, not shared\\)\\\\n.claude/settings.local.json\\\\n' >> .gitignore && tail -8 .gitignore)"
+      "Bash(cd \"C:/Users/Ronni/React/Fishing App\" && printf '\\\\n# Claude Code local overrides \\(personal, not shared\\)\\\\n.claude/settings.local.json\\\\n' >> .gitignore && tail -8 .gitignore)",
+      "Bash(node -e ' *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Ronni\\React\\Fishing App"
