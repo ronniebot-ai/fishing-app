@@ -37,7 +37,7 @@
 }
 
 .app[data-map='open'] .map-rail {
-  height: 46vh;
+  height: 55vh;
 }
 
 @media (min-width: 900px) {
@@ -71,11 +71,26 @@
   text-overflow: ellipsis;
 }
 
-.map-toggle {
+.map-account {
   position: absolute;
   right: 12px;
   bottom: 14px;
   z-index: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.map-account .account-name {
+  background: var(--ground);
+  border: 1px solid var(--rule);
+  padding: 6px 11px;
+  font-family: var(--cond);
+  font-size: 12.5px;
+  color: var(--dim);
+}
+
+.map-account button {
   appearance: none;
   background: var(--ground);
   color: var(--ink);
@@ -88,18 +103,45 @@
   cursor: pointer;
 }
 
+/* At 900px+ the map keeps its full height, so there is no strip to clear —
+   the chip and the account controls move to the top instead, where they sit
+   against open water rather than getting lost under the instrument column's
+   eye line, and read larger since there is room for it. */
 @media (min-width: 900px) {
-  .map-toggle {
-    display: none;
+  .spot-chip {
+    top: 16px;
+    bottom: auto;
+    /* Left offset clears Leaflet's own zoom control, which keeps its default
+       top-left corner. */
+    left: 56px;
+    max-width: calc(100% - 210px);
+    padding: 7px 13px;
+    font-size: 15px;
+  }
+
+  .map-account {
+    top: 14px;
+    bottom: auto;
+  }
+
+  .map-account .account-name {
+    padding: 7px 13px;
+    font-size: 15px;
+  }
+
+  .map-account button {
+    padding: 7px 14px;
+    font-size: 15px;
   }
 }
 
-/* Below 900px the rail doubles as a strip, and Leaflet's own furniture lands
-   on top of the two things the strip is for. The zoom buttons are useless at
-   88px tall, and the chip and the button both move clear of the attribution,
-   which has to stay visible whatever height the map is. */
+/* Below 900px the rail doubles as a strip once a spot is picked, and Leaflet's
+   own furniture lands on top of the two things the strip is for. The zoom
+   buttons are useless at 88px tall, and the chip and the account controls both
+   move clear of the attribution, which has to stay visible whatever height the
+   map is. */
 @media (max-width: 899px) {
-  .map-toggle {
+  .map-account {
     top: 10px;
     right: 10px;
     bottom: auto;
@@ -605,6 +647,48 @@ h2.sec {
   font-family: var(--cond);
   font-size: 12.5px;
   color: var(--warn);
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.login-form input {
+  appearance: none;
+  background: var(--ground);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  font-family: var(--sans);
+  font-size: 14px;
+  padding: 8px 10px;
+}
+
+.login-form input:focus-visible {
+  outline: none;
+  border-color: var(--curve);
+}
+
+.login-form button {
+  align-self: flex-start;
+  appearance: none;
+  background: transparent;
+  color: var(--curve-ink);
+  border: 1px solid var(--curve);
+  border-radius: 2px;
+  font-family: var(--cond);
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+
+.login-error {
+  font-family: var(--cond);
+  font-size: 12.5px;
+  color: var(--bad);
 }
 
 /* Already kept: a statement, not a control. */
