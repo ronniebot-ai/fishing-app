@@ -33,3 +33,7 @@ dist-ssr
 # Local env (MONGODB_URI, ANTHROPIC_API_KEY)
 .env
 .env*.local
+
+# next dev writes these on first run (agentRules in next.config.ts)
+/AGENTS.md
+/CLAUDE.md

@@ -7,6 +7,7 @@ import './App.css';
 import { FAR_ANCHOR_KM } from '../api/oceanSnap';
 import { findSaved } from '../api/spots';
 import type { LatLon } from '../api/types';
+import { LoginModal } from '../components/LoginModal';
 import { Readout } from '../components/Readout';
 import { SaveSpot } from '../components/SaveSpot';
 import { SavedSpots } from '../components/SavedSpots';
@@ -18,6 +19,7 @@ import { describeConditions } from '../domain/describe';
 import { scoreHour } from '../domain/score';
 import { parseSpot } from '../domain/spotUrl';
 import { formatDay, formatHour, formatLatLon } from '../domain/units';
+import { useAuth } from '../hooks/useAuth';
 import { useChatAvailable } from '../hooks/useChat';
 import { useConditions } from '../hooks/useConditions';
 import { useNow } from '../hooks/useNow';
@@ -58,6 +60,8 @@ export default function App({ initialSpot }: { initialSpot: LatLon | null }) {
   const [spot, setSpot] = useState<LatLon | null>(initialSpot);
   const [cursorT, setCursorT] = useState<number | null>(null);
   const [mapOpen, setMapOpen] = useState(false);
+  const auth = useAuth();
+  const [loginOpen, setLoginOpen] = useState(false);
   // Where to fly the map, set only by choosing a saved spot. Clicking the map
   // must not move it under the user's finger, so `handlePick` leaves this be.
   const [focus, setFocus] = useState<LatLon | null>(null);
@@ -87,13 +91,34 @@ export default function App({ initialSpot }: { initialSpot: LatLon | null }) {
   }, []);
 
   const handlePick = useCallback((p: LatLon) => {
+    // Below 900px a chosen spot collapses the map to an 88px strip, and that
+    // strip is still a live Leaflet map — a tap on it would otherwise repick
+    // from whatever sliver happens to be visible. Read the collapse as "let
+    // me see the map" once, rather than a coordinate.
+    if (spot && !mapOpen) {
+      setMapOpen(true);
+      return;
+    }
     setSpot(p);
     // The map has done its job; give the screen back to the readings.
     setMapOpen(false);
-  }, []);
+  }, [spot, mapOpen]);
 
   // Takes a bare point rather than a SavedSpot: the saved list and the nearby
   // list both want it, and only the coordinates were ever read.
+  // Saving, renaming, and removing all touch the shared store, so all three
+  // stop at the same gate: run the action if logged in, otherwise ask for a
+  // login and drop the action rather than queue it — the user presses the
+  // button again once they are in, which is simpler than remembering intent
+  // across a modal.
+  const requireAuth = useCallback((action: () => void) => {
+    if (!auth.loggedIn) {
+      setLoginOpen(true);
+      return;
+    }
+    action();
+  }, [auth.loggedIn]);
+
   const handleSelectSaved = useCallback((at: LatLon) => {
     // A fresh object every time, so returning to the spot you are already on
     // still flies the map back to it after you have panned away.
@@ -162,14 +187,20 @@ export default function App({ initialSpot }: { initialSpot: LatLon | null }) {
           {savedHere?.name ?? (spot ? formatLatLon(spot.lat, spot.lon) : 'Tap the coast to pick a spot')}
         </div>
         {spot && (
-          <button
-            type="button"
-            className="map-toggle"
-            aria-expanded={mapOpen}
-            onClick={() => setMapOpen((open) => !open)}
-          >
-            {mapOpen ? 'Hide map' : 'Change spot'}
-          </button>
+          <div className="map-account">
+            {auth.loggedIn ? (
+              <>
+                <span className="account-name">Admin</span>
+                <button type="button" onClick={auth.logout}>
+                  Log out
+                </button>
+              </>
+            ) : (
+              <button type="button" onClick={() => setLoginOpen(true)}>
+                Login
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -195,15 +226,15 @@ export default function App({ initialSpot }: { initialSpot: LatLon | null }) {
                 saved={savedHere}
                 saving={library.saving}
                 error={library.saveError}
-                onSave={(name) => library.save(spot, name)}
+                onSave={(name) => requireAuth(() => library.save(spot, name))}
               />
             )}
             <SavedSpots
               spots={library.spots}
               selected={spot}
               onSelect={handleSelectSaved}
-              onRename={library.rename}
-              onRemove={library.remove}
+              onRename={(id, name) => requireAuth(() => library.rename(id, name))}
+              onRemove={(id) => requireAuth(() => library.remove(id))}
             />
           </div>
         )}
@@ -352,6 +383,12 @@ export default function App({ initialSpot }: { initialSpot: LatLon | null }) {
           </>
         )}
       </div>
+
+      <LoginModal
+        open={loginOpen}
+        onClose={() => setLoginOpen(false)}
+        onLogin={auth.login}
+      />
     </div>
   );
 }

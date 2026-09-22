@@ -60,7 +60,11 @@ export function Spine({
   const width = useElementWidth(holder);
   const [cursorT, setCursorT] = useState<number | null>(null);
 
-  const slice = points.filter((p) => p.t >= now - HOUR && p.t <= now + hours * HOUR);
+  // A third of the drawing is where you have been, two thirds where you are
+  // headed — half of the forward window looks back, which puts `now` at the
+  // 1/3 mark rather than pinned to the left edge.
+  const pastHours = hours / 2;
+  const slice = points.filter((p) => p.t >= now - pastHours * HOUR && p.t <= now + hours * HOUR);
   if (slice.length < 3) return null;
 
   const tidal = slice.filter((p) => p.tideHeight !== null);
@@ -127,7 +131,9 @@ export function Spine({
   const ticks: { t: number; midnight: boolean }[] = [];
   const first = new Date(t0 + utcOffsetSeconds * 1000);
   const startOfDay = Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), first.getUTCDate());
-  for (let h = 0; h <= (hours + 24) / 3; h++) {
+  // Ticks run from that midnight to t1: at most 24h to reach t0 (startOfDay is
+  // t0's own day), then the full span the slice covers from there.
+  for (let h = 0; h <= (pastHours + hours + 24) / 3; h++) {
     const t = startOfDay + h * 3 * HOUR - utcOffsetSeconds * 1000;
     if (t <= t0 || t >= t1) continue;
     const local = new Date(t + utcOffsetSeconds * 1000);

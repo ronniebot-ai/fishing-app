@@ -103,6 +103,10 @@ export async function fetchMarine(
     hourly: MARINE_HOURLY,
     timezone: 'auto',
     forecast_days: String(FORECAST_DAYS),
+    // The spine draws a third of its width behind `now`. Without this, Open-
+    // Meteo starts the series at today's local midnight, which is less than a
+    // day of history whenever "now" is in the morning.
+    past_days: '1',
   });
   const payload = await getJson<MarineResponse | MarineResponse[]>(url, signal);
   return toArray(payload)[0];
@@ -123,6 +127,7 @@ export async function fetchForecast(
     current: FORECAST_CURRENT,
     timezone: 'auto',
     forecast_days: String(FORECAST_DAYS),
+    past_days: '1',
     wind_speed_unit: 'kn',
   });
   const payload = await getJson<ForecastResponse | ForecastResponse[]>(

@@ -38,6 +38,7 @@ const ALLOWED = [
   'current',
   'timezone',
   'forecast_days',
+  'past_days',
   'wind_speed_unit',
 ] as const;
 
