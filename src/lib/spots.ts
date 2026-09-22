@@ -1,5 +1,5 @@
 import { ObjectId, type Collection, type Db } from 'mongodb';
-import { SPOTS } from './indexes';
+import { SPOTS } from './indexes.ts';
 
 /**
  * Everything that touches the store lives here, so the HTTP layer above it

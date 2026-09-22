@@ -5,11 +5,12 @@ import dynamic from 'next/dynamic';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import './App.css';
 import { FAR_ANCHOR_KM } from '../api/oceanSnap';
-import { findSaved, type SavedSpot } from '../api/spots';
+import { findSaved } from '../api/spots';
 import type { LatLon } from '../api/types';
 import { Readout } from '../components/Readout';
 import { SaveSpot } from '../components/SaveSpot';
 import { SavedSpots } from '../components/SavedSpots';
+import { SpotStats } from '../components/SpotStats';
 import { Spine } from '../components/Spine';
 import { Verdict } from '../components/Verdict';
 import { buildChatContext } from '../domain/chatContext';
@@ -21,6 +22,7 @@ import { useChatAvailable } from '../hooks/useChat';
 import { useConditions } from '../hooks/useConditions';
 import { useNow } from '../hooks/useNow';
 import { useSavedSpots } from '../hooks/useSavedSpots';
+import { NEARBY_KM, useRecordConditions, useSpotHistory } from '../hooks/useSpotHistory';
 
 // antd's Table and Tabs are the heaviest import in the app, and nothing they
 // render exists until a spot has been picked and its forecast has landed. That
@@ -90,11 +92,13 @@ export default function App({ initialSpot }: { initialSpot: LatLon | null }) {
     setMapOpen(false);
   }, []);
 
-  const handleSelectSaved = useCallback((saved: SavedSpot) => {
+  // Takes a bare point rather than a SavedSpot: the saved list and the nearby
+  // list both want it, and only the coordinates were ever read.
+  const handleSelectSaved = useCallback((at: LatLon) => {
     // A fresh object every time, so returning to the spot you are already on
     // still flies the map back to it after you have panned away.
-    setFocus({ lat: saved.lat, lon: saved.lon });
-    setSpot({ lat: saved.lat, lon: saved.lon });
+    setFocus({ lat: at.lat, lon: at.lon });
+    setSpot({ lat: at.lat, lon: at.lon });
     setMapOpen(false);
   }, []);
 
@@ -132,6 +136,13 @@ export default function App({ initialSpot }: { initialSpot: LatLon | null }) {
   }, [spot, ready, savedHere?.name, timeline, extremes, windows, snap, utcOffsetSeconds, timezone, now]);
 
   const canAsk = useChatAvailable();
+
+  // Keep what is on screen, and read back what previous visits recorded. The
+  // recording is fire-and-forget: nothing here waits for it or shows when it
+  // fails, because a missed batch costs a statistic and the next visit sends
+  // the same hours again.
+  useRecordConditions(savedHere, timeline, extremes, utcOffsetSeconds, now);
+  const history = useSpotHistory(savedHere, spot);
 
   // Without a spot the map is the only thing to do, so it takes the screen.
   const mapState = !spot || mapOpen ? 'open' : 'closed';
@@ -317,6 +328,19 @@ export default function App({ initialSpot }: { initialSpot: LatLon | null }) {
                 now={now}
               />
             </Suspense>
+
+            {/* Last, because it answers a different question from everything
+                above it: not what this weekend looks like, but what this place
+                is like. It disappears rather than erroring when the API is
+                unreachable, the same way the saved-spot library does. */}
+            {history.available && (
+              <SpotStats
+                stats={history.stats}
+                nearby={history.nearby}
+                km={NEARBY_KM}
+                onSelect={handleSelectSaved}
+              />
+            )}
 
             <p className="disclosure">
               Forecasts come from Open-Meteo. Tides are modelled globally rather than

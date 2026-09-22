@@ -15,7 +15,10 @@ import { MongoClient, type MongoClient as Client } from 'mongodb';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { ensureIndexes } from '../../../lib/indexes';
+import { POST as RECORD } from './[id]/conditions/route';
 import { DELETE, PATCH } from './[id]/route';
+import { GET as STATS } from './[id]/stats/route';
+import { GET as NEARBY } from './nearby/route';
 import { GET, POST } from './route';
 
 const BONDI = { lat: -33.8908, lon: 151.2743 };
@@ -88,6 +91,44 @@ function remove(id: string) {
 /** Saves a spot and hands back the id the store gave it. */
 async function save(body: unknown = BONDI): Promise<string> {
   return (await read(await post(body))).body.id;
+}
+
+const MANLY = { lat: -33.7969, lon: 151.2873 };
+
+/** One hour of readings, as the page sends them. */
+function hour(at: string, score = 60) {
+  return {
+    at,
+    score,
+    unfishable: false,
+    factors: { tide: 0.8, wind: 0.6, wave: 0.5, rain: 1 },
+    windKn: 12,
+    gustKn: 18,
+    waveM: 0.8,
+    tideRate: 0.3,
+    rainMm: 0,
+  };
+}
+
+function recordHours(id: string, hours: unknown[]) {
+  return RECORD(
+    new Request(`${ORIGIN}/api/spots/${id}/conditions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ utcOffsetSeconds: 10 * 3600, hours }),
+    }),
+    { params: Promise.resolve({ id }) },
+  );
+}
+
+function stats(id: string, query = '') {
+  return STATS(new Request(`${ORIGIN}/api/spots/${id}/stats${query}`), {
+    params: Promise.resolve({ id }),
+  });
+}
+
+function nearby(query: string) {
+  return NEARBY(new Request(`${ORIGIN}/api/spots/nearby${query}`));
 }
 
 describe('GET /api/spots', () => {
@@ -167,5 +208,105 @@ describe('DELETE /api/spots/:id', () => {
 
   it('404s on an id that was never saved', async () => {
     expect(await read(await remove(ABSENT))).toMatchObject({ status: 404 });
+  });
+});
+
+describe('POST /api/spots/:id/conditions', () => {
+  it('accepts a batch with 202 and says what it did with it', async () => {
+    const id = await save();
+
+    const res = await read(await recordHours(id, [hour('2026-09-20T00:00:00.000Z')]));
+
+    expect(res.status).toBe(202);
+    expect(res.body).toEqual({ received: 1, inserted: 1, updated: 0 });
+  });
+
+  it('updates an hour it already holds instead of keeping two', async () => {
+    const id = await save();
+    await recordHours(id, [hour('2026-09-20T00:00:00.000Z', 40)]);
+
+    const res = await read(await recordHours(id, [hour('2026-09-20T00:00:00.000Z', 72)]));
+
+    expect(res.body).toMatchObject({ received: 1, inserted: 0, updated: 1 });
+  });
+
+  it('404s for a spot that is not there', async () => {
+    expect(await read(await recordHours(ABSENT, [hour('2026-09-20T00:00:00.000Z')]))).toMatchObject({
+      status: 404,
+    });
+  });
+
+  it('400s on a body that is not a batch of hours', async () => {
+    const id = await save();
+    expect(await read(await recordHours(id, 'lots' as unknown as unknown[]))).toMatchObject({
+      status: 400,
+    });
+  });
+});
+
+describe('GET /api/spots/:id/stats', () => {
+  it('answers with the shape the panel reads, even with no history', async () => {
+    const id = await save();
+
+    const res = await read(await stats(id));
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ samples: 0, days: 30, byHour: [], factors: null });
+  });
+
+  it('summarises the hours it has been sent', async () => {
+    const id = await save();
+    const recent = new Date(Date.now() - 3 * 3600_000).toISOString();
+    await recordHours(id, [hour(recent, 82)]);
+
+    const res = await read(await stats(id));
+
+    expect(res.body.samples).toBe(1);
+    expect(res.body.byHour).toHaveLength(1);
+    expect(res.body.factors).toMatchObject({ tide: 0.8, wind: 0.6 });
+  });
+
+  it('takes the window from the query string', async () => {
+    const id = await save();
+    expect((await read(await stats(id, '?days=7'))).body.days).toBe(7);
+  });
+
+  it.each([
+    ['an id the store could not have issued', 'abc', ''],
+    ['a window of no days', ABSENT, '?days=0'],
+  ])('400s on %s', async (_label, id, query) => {
+    expect(await read(await stats(id, query))).toMatchObject({ status: 400 });
+  });
+});
+
+describe('GET /api/spots/nearby', () => {
+  it('returns saved spots nearest first, with a distance', async () => {
+    await post({ ...BONDI, name: 'Bondi' });
+    await post({ ...MANLY, name: 'Manly' });
+
+    const res = await read(await nearby(`?lat=${BONDI.lat}&lon=${BONDI.lon}&km=50`));
+
+    expect(res.status).toBe(200);
+    expect(res.body.map((s: { name: string }) => s.name)).toEqual(['Bondi', 'Manly']);
+    expect(res.body[0].distanceM).toBe(0);
+    expect(res.body[1].distanceM).toBeGreaterThan(9_000);
+  });
+
+  it('leaves out anything past the radius', async () => {
+    await post({ ...BONDI, name: 'Bondi' });
+    await post({ ...MANLY, name: 'Manly' });
+
+    const res = await read(await nearby(`?lat=${BONDI.lat}&lon=${BONDI.lon}&km=5`));
+
+    expect(res.body.map((s: { name: string }) => s.name)).toEqual(['Bondi']);
+  });
+
+  it('defaults the radius when none is given', async () => {
+    await post({ ...BONDI, name: 'Bondi' });
+    expect((await read(await nearby(`?lat=${BONDI.lat}&lon=${BONDI.lon}`))).body).toHaveLength(1);
+  });
+
+  it('400s without a point to search from', async () => {
+    expect(await read(await nearby('?km=10'))).toMatchObject({ status: 400 });
   });
 });

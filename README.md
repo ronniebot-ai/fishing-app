@@ -102,8 +102,119 @@ has no backfill in front of it.
 
 ```bash
 cp .env.example .env.local   # fill in MONGODB_URI
-npm run db:indexes           # once per cluster
+npm run db:indexes           # once per cluster, and after changing them
+npm run db:audit             # check the store; add -- --fix to repair
+npm run db:bench             # measure what the indexes and the facet are worth
 ```
+
+Those three run under plain Node rather than through the app, which is why
+`src/lib/indexes.ts`, `src/lib/mongo.ts` and `src/lib/audit.ts` import each
+other with explicit `.ts` extensions and import nothing else from the project:
+Node strips types but does not resolve extensionless imports the way a bundler
+does.
+
+## What the app remembers
+
+Every time a saved spot is opened, the app posts the next 48 hours it has just
+drawn — the scores, the factors behind them, and the readings behind those — to
+`POST /api/spots/:id/conditions`. Nothing on screen waits for it and nothing
+shows when it fails; a lost batch costs a statistic and the next visit sends
+the same hours again.
+
+That turns a page which only knows about right now into one that can answer a
+question no forecast API can: not *what is it doing this weekend* but *what is
+this place like*.
+
+The stored scores are the ones `scoreHour` produced for the screen, not a
+second calculation on the server, so a kept hour and a drawn hour cannot
+disagree. Hours scored from an incomplete reading are skipped — a partial score
+is honest enough to show with a caveat beside it, but averaging over it later
+would quietly mix two different measurements.
+
+### Duplicates are prevented, not cleaned up
+
+`(spotId, at)` is unique and every write is an upsert against it. The app
+re-sends overlapping windows every time a spot is opened, so a repeated hour is
+the ordinary case rather than an edge one: it lands on the same document and
+updates in place. Nothing downstream filters duplicates because none are ever
+created. A TTL index on `capturedAt` ages snapshots out after 90 days, which is
+what keeps a free tier's 512 MB from being a deadline.
+
+### The two aggregations
+
+**`GET /api/spots/:id/stats`** answers four questions in one pass with `$facet`:
+average and best score for each hour of the day, how the scores fall across five
+bands (`$bucket`), the mean contribution of each factor, and what share of hours
+the gates ruled out.
+
+The hour-of-day grouping happens in the spot's own time, not the server's.
+`$hour` takes its `timezone` as an expression, so each snapshot carries its own
+UTC offset and the pipeline reads it off the document. 20:00 UTC is 6am in
+Sydney, and for a fishing app that is the difference between dawn and after
+dinner.
+
+**`GET /api/spots/nearby?lat&lon&km`** is a `$geoNear` over a 2dsphere index,
+with a `$lookup` that pulls the next hour held for each spot so the list can say
+what the fishing looks like there rather than only how far away it is. Every
+spot stores its position twice — as `lat`/`lon` and as a GeoJSON point — because
+`$geoNear` cannot read a pair of loose fields, and the point is written from the
+first save so there was never a backfill to run.
+
+Both are consumed by the block at the bottom of the page. An endpoint nothing
+reads is not a feature.
+
+### What the indexes are worth
+
+`npm run db:bench` seeds a scratch database, measures it and drops it. Over
+50,000 snapshots across 40 spots on a local mongod:
+
+| stats `$match` on `(spotId, at)` | documents examined | time |
+|---|---|---|
+| index seek | 720 | 3 ms |
+| forced collection scan | 50,000 | 18 ms |
+
+69x fewer documents read. The comparison uses `hint: { $natural: 1 }` rather
+than dropping the index, so both sides run against the same documents in the
+same process moments apart. The pipeline averages a field rather than counting,
+because a `$count` would be answered from the index alone and flatter the
+result into meaninglessness.
+
+| the four stats questions | time |
+|---|---|
+| one `$facet` | 4.3 ms |
+| four separate pipelines | 8.6 ms |
+
+Twice as fast, and one round trip instead of four — which across the internet
+from a serverless function is the larger half of the win.
+
+`$geoNear` has no slow path to compare against. Without a 2dsphere index it does
+not fall back to a scan; it refuses to run.
+
+### Auditing it
+
+`npm run db:audit` checks five things, each as an aggregation rather than a loop
+in Node, because the questions are about relationships between documents and
+pulling the collection into memory to ask them would stop working at exactly the
+size where you would want to.
+
+| check | what it looks for | `--fix` |
+|---|---|---|
+| near-duplicate spots | two taps ~110 m apart, which the unique index cannot see | merges into the oldest, moving its snapshots across |
+| orphan snapshots | hours whose spot has been deleted | deletes them |
+| coordinates off the planet | latitude past a pole, longitude past the date line | nothing — there is no right answer |
+| location out of step | GeoJSON point missing or disagreeing with lat/lon | rebuilds it from lat/lon |
+| precision drift | coordinates finer than the 4dp the map hands out | rounds them |
+
+Two details are worth knowing before running it with `--fix`. Merging picks the
+oldest of a cluster to keep, which is a guess about intent rather than a fact.
+And because `(spotId, at)` is unique, an hour the keeper already holds cannot
+simply be repointed at it: the loser's copy is dropped, on the grounds that the
+surviving spot's reading is the one to believe.
+
+The order the fixes run in matters. Rounding coordinates can push two spots onto
+the same 4dp pair, so precision is repaired first and the merge pass then sees
+the duplicates it created; orphans are cleaned last, because merging deletes
+spots and so can make new ones.
 
 ## How it works
 
@@ -258,13 +369,15 @@ which would stretch x and y independently and squash every label.
 ```
 src/
   app/        layout, page, providers, App  +  api/ route handlers  (spots, chat)
-  lib/        the server half: spot store, db handle, chat, request/response edges
+  lib/        the server half: spot store, snapshots and their aggregations,
+              the audit, the Atlas connection, chat, request/response edges
   api/        Open-Meteo clients, response types, ocean snapping, chat client
   domain/     tides, scoring, timeline merge, phrasing, chat context, URL parsing  (pure, unit-tested)
   components/ map, verdict, readout, charts, tables, ask panel  (+ .test.tsx, .stories.tsx)
   hooks/      useConditions (snap -> marine + forecast), useChat, useNow, useElementWidth
   fixtures/   sample conditions shared by tests and stories
   test/       jsdom setup for the component project
+scripts/      db:indexes, db:audit, db:bench  (plain Node, not bundled)
 .storybook/   Storybook config
 ```
 

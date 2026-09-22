@@ -870,3 +870,123 @@ h2.sec {
   max-width: 68ch;
   line-height: 1.6;
 }
+
+/* ------------------------------------------------------------------
+   Spot history
+
+   Everything above this is about the next two days. This block is about
+   the place, which is the only thing on the page that needs the app to
+   have been paying attention over time.
+   ------------------------------------------------------------------ */
+.history {
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 1px solid var(--rule);
+}
+
+.history h3 {
+  font-family: var(--cond);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--dim);
+  margin: 20px 0 4px;
+}
+
+.history-sub {
+  color: var(--dim);
+  font-size: 14.5px;
+  margin: 0 0 12px;
+  max-width: 58ch;
+}
+
+.history-sub b {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* One bar per hour of the day. The shape is the whole message — dawn spots
+   and sea-breeze spots look different at a glance — so the only axis is four
+   anchors underneath it. */
+.hours {
+  display: grid;
+  grid-template-columns: repeat(24, 1fr);
+  align-items: end;
+  gap: 2px;
+  height: 64px;
+}
+
+.hours .hour {
+  display: flex;
+  align-items: flex-end;
+  height: 100%;
+}
+
+.hours .hour i {
+  display: block;
+  width: 100%;
+  height: var(--h);
+  min-height: 1px;
+  background: currentColor;
+}
+
+/* An hour with nothing kept is a gap, not a calm one. */
+.hours .hour[data-empty] i {
+  height: 100%;
+  background: var(--rule-soft);
+}
+
+.hours-axis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin-top: 5px;
+  font-family: var(--cond);
+  font-size: 11.5px;
+  color: var(--dim);
+}
+
+.nearby {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nearby li + li {
+  border-top: 1px solid var(--rule-soft);
+}
+
+.nearby button {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  padding: 7px 0;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nearby button:hover .n {
+  text-decoration: underline;
+}
+
+.nearby .d,
+.nearby .s {
+  font-family: var(--cond);
+  font-variant-numeric: tabular-nums;
+}
+
+.nearby .d {
+  color: var(--dim);
+  font-size: 13.5px;
+}
+
+.nearby .s {
+  font-size: 16px;
+  min-width: 2.4ch;
+  text-align: right;
+}
