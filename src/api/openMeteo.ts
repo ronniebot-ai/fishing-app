@@ -5,8 +5,18 @@ import type {
   MarineResponse,
 } from './types';
 
-const MARINE_URL = 'https://marine-api.open-meteo.com/v1/marine';
-const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
+/**
+ * Both models are read through this app's own edge function rather than
+ * straight from Open-Meteo, so that everybody looking at the same stretch of
+ * coast shares one cached answer — see src/app/api/forecast/[model]/route.ts.
+ *
+ * The path is relative because the page and the function are one deployment,
+ * and the parameters are built in a fixed order because the URL is the cache
+ * key.
+ */
+function endpoint(model: 'forecast' | 'marine', params: Record<string, string>): string {
+  return `/api/forecast/${model}?${new URLSearchParams(params)}`;
+}
 
 /** How many days of forecast the app requests. The API allows up to 10. */
 export const FORECAST_DAYS = 7;
@@ -69,11 +79,12 @@ export async function probeMarineBatch(
   points: LatLon[],
   signal?: AbortSignal,
 ): Promise<MarineProbeResponse[]> {
-  const lat = points.map((p) => p.lat).join(',');
-  const lon = points.map((p) => p.lon).join(',');
-  const url =
-    `${MARINE_URL}?latitude=${lat}&longitude=${lon}` +
-    `&hourly=wave_height&forecast_days=1`;
+  const url = endpoint('marine', {
+    latitude: points.map((p) => p.lat).join(','),
+    longitude: points.map((p) => p.lon).join(','),
+    hourly: 'wave_height',
+    forecast_days: '1',
+  });
   const payload = await getJson<MarineProbeResponse | MarineProbeResponse[]>(
     url,
     signal,
@@ -86,9 +97,13 @@ export async function fetchMarine(
   point: LatLon,
   signal?: AbortSignal,
 ): Promise<MarineResponse> {
-  const url =
-    `${MARINE_URL}?latitude=${point.lat}&longitude=${point.lon}` +
-    `&hourly=${MARINE_HOURLY}&timezone=auto&forecast_days=${FORECAST_DAYS}`;
+  const url = endpoint('marine', {
+    latitude: String(point.lat),
+    longitude: String(point.lon),
+    hourly: MARINE_HOURLY,
+    timezone: 'auto',
+    forecast_days: String(FORECAST_DAYS),
+  });
   const payload = await getJson<MarineResponse | MarineResponse[]>(url, signal);
   return toArray(payload)[0];
 }
@@ -101,10 +116,15 @@ export async function fetchForecast(
   point: LatLon,
   signal?: AbortSignal,
 ): Promise<ForecastResponse> {
-  const url =
-    `${FORECAST_URL}?latitude=${point.lat}&longitude=${point.lon}` +
-    `&hourly=${FORECAST_HOURLY}&current=${FORECAST_CURRENT}` +
-    `&timezone=auto&forecast_days=${FORECAST_DAYS}&wind_speed_unit=kn`;
+  const url = endpoint('forecast', {
+    latitude: String(point.lat),
+    longitude: String(point.lon),
+    hourly: FORECAST_HOURLY,
+    current: FORECAST_CURRENT,
+    timezone: 'auto',
+    forecast_days: String(FORECAST_DAYS),
+    wind_speed_unit: 'kn',
+  });
   const payload = await getJson<ForecastResponse | ForecastResponse[]>(
     url,
     signal,

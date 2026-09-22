@@ -19,8 +19,9 @@ is why the client uses relative URLs everywhere.
 
 The app is installable: `src/app/manifest.ts` gives it a name, icons and a
 standalone display mode, so a phone offers "Add to home screen". There is no
-service worker, so it does not cache and does not work offline — worth knowing,
-because a fishing spot is usually where the signal is worst.
+service worker, so it does not work offline — worth knowing, because a fishing
+spot is usually where the signal is worst. Forecasts are cached, but at the
+edge rather than on the device; see below.
 
 ### Tests
 
@@ -225,6 +226,31 @@ Two Open-Meteo endpoints, both free and keyless:
 - **Marine API** — wave height/period/direction, swell, and `sea_level_height_msl`
   for the tide, for the nearest ocean grid cell.
 
+### Through the edge
+
+Neither is called from the browser. Both go through `/api/forecast/[model]`, an
+edge function that forwards the request and answers with
+`s-maxage=900, stale-while-revalidate=3600`, so everyone looking at the same
+stretch of coast shares one cached answer instead of each paying for their own.
+
+That is not decoration. Open-Meteo's free tier is roughly 10,000 requests a day
+and a single spot costs two or three of them, which was the nearest real limit
+this app had. The ocean snap benefits most: it probes 25 candidates in one
+batched request whose coordinates come off a fixed grid, so two people who tap
+anywhere near each other produce byte-identical URLs and the second is served
+without the request leaving the edge.
+
+It is a proxy for two fixed hosts, not an open one. The model is a choice of
+two, coordinates are range-checked and have to pair up, and any parameter not
+on the allow list is dropped rather than forwarded — otherwise the cache key is
+whatever a stranger types. The upstream query is rebuilt in a fixed order so it
+does not depend on the order the caller used, and only a successful answer is
+allowed to be cached: fifteen minutes of a cached error is fifteen minutes of a
+broken app.
+
+Edge rather than Node because there is nothing to do but rewrite a URL and pass
+a response along.
+
 ### Ocean snapping
 
 The marine model only covers water. Request a land cell and every hourly value
@@ -331,7 +357,8 @@ in the Anthropic Console** — that is the backstop none of the above replaces.
   strongly affect feeding and are the most natural thing to add next — `suncalc`
   computes both locally with no extra API.
 - Open-Meteo's free tier is non-commercial and roughly 10,000 requests/day. Each
-  spot costs 2–3 requests, or 2 once the snap is cached.
+  spot costs 2–3 requests, or 2 once the snap is cached — and far fewer than
+  that across visitors, now that the edge holds each answer for 15 minutes.
 
 Check BOM before heading out.
 
