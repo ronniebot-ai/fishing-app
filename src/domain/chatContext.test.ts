@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TimelinePoint } from '../api/types';
 import {
-  NOW, SYDNEY_UTC_OFFSET, extremes, inlandPoint, nowPoint, timeline, windows,
+  NOW, SYDNEY_UTC_OFFSET, extremes, inlandPoint, light, nowPoint, timeline, windows,
 } from '../fixtures/conditions';
 import { buildChatContext, type ChatContextInput } from './chatContext';
 import { scoreHour } from './score';
@@ -23,6 +23,7 @@ function context(over: Partial<ChatContextInput> = {}): string {
     timeline,
     extremes,
     windows,
+    light,
     snap: { anchor: { lat: -33.89, lon: 151.29 }, distanceKm: 1.8 },
     utcOffsetSeconds: SYDNEY_UTC_OFFSET,
     timezone: 'Australia/Sydney',
@@ -81,7 +82,8 @@ describe('buildChatContext', () => {
     const ahead = extremes.filter((e) => e.t >= NOW);
     expect(ahead.length).toBeGreaterThan(0);
     for (const turn of ahead) {
-      expect(turns).toMatch(turn.kind === 'high' ? /High \d/ : /Low \d/);
+      // Dated, not just clocked: a bare "4:30pm" two days out reads as today.
+      expect(turns).toMatch(turn.kind === 'high' ? /High \w{3} \d+ \d/ : /Low \w{3} \d+ \d/);
     }
     expect(turns.split('\n').filter((l) => /^(High|Low) /.test(l))).toHaveLength(ahead.length);
   });
@@ -91,6 +93,21 @@ describe('buildChatContext', () => {
 
     expect(text).toMatch(/BEST WINDOWS/);
     expect(text).toMatch(new RegExp(`averaging ${windows[0].score}/100`));
+  });
+
+  it('leaves out a window the hourly readings do not reach, and says it did', () => {
+    // The chart can be set to search a week; this block only ever carries two
+    // days. A window quoted without the hours behind it is a score the
+    // assistant cannot explain and will date wrongly.
+    const far = { startT: NOW + 120 * 3600_000, endT: NOW + 123 * 3600_000, score: 91, peakT: NOW + 121 * 3600_000 };
+    const text = context({ windows: [...windows, far] });
+
+    expect(text).not.toMatch(/averaging 91\/100/);
+    expect(text).toMatch(/1 more beyond the 48 hours/);
+  });
+
+  it('says nothing about extras when every window is inside the horizon', () => {
+    expect(context()).not.toMatch(/more beyond/);
   });
 
   it('says when the marine figures were measured somewhere else', () => {

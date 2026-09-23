@@ -30,6 +30,7 @@ export interface MarineResponse extends OpenMeteoEnvelope {
     wave_direction: (number | null)[];
     swell_wave_height: (number | null)[];
     swell_wave_period: (number | null)[];
+    swell_wave_direction: (number | null)[];
     sea_level_height_msl: (number | null)[];
   };
 }
@@ -54,11 +55,22 @@ export interface ForecastResponse extends OpenMeteoEnvelope {
   hourly: {
     time: string[];
     temperature_2m: (number | null)[];
+    cloud_cover: (number | null)[];
     precipitation: (number | null)[];
     precipitation_probability: (number | null)[];
     wind_speed_10m: (number | null)[];
     wind_direction_10m: (number | null)[];
     wind_gusts_10m: (number | null)[];
+  };
+  /**
+   * Local wall clock, one entry per day, in the same zone as `hourly.time`.
+   * Absent at the poles in the months the sun does not cross the horizon,
+   * which is why every field here is optional rather than assumed.
+   */
+  daily?: {
+    time: string[];
+    sunrise?: (string | null)[];
+    sunset?: (string | null)[];
   };
 }
 
@@ -79,12 +91,16 @@ export interface TimelinePoint {
   windDir: number | null;
   precip: number | null;
   precipProb: number | null;
+  /** Total cloud cover, 0-100%. */
+  cloudCover: number | null;
   temp: number | null;
   waveHeight: number | null;
   wavePeriod: number | null;
   waveDir: number | null;
   swellHeight: number | null;
   swellPeriod: number | null;
+  /** Where the swell is coming from, in degrees. */
+  swellDir: number | null;
   /** Sea level relative to mean sea level (MSL), in metres. */
   tideHeight: number | null;
   /** Rate of tide change in m/hr, derived via central difference. */

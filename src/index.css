@@ -31,16 +31,67 @@
   --rule: #16394b;
   --rule-soft: #102f40;
 
-  --curve: #2fa5b8;
-  --curve-ink: #5bc8d8; /* brighter step, for text and small marks only */
-  --curve-fill: rgba(47, 165, 184, 0.16);
-  --wash: rgba(47, 165, 184, 0.11);
-  --gust: #c9822f;
+  /* Both series lifted a step. They used to be chosen against the bare
+     ground; they are now chosen against the strongest score band they have
+     to cross, which is a lighter surface than the page. Validated as a pair:
+     CVD ΔE 18.8, normal-vision 22.9. */
+  --curve: #86e3f2;
+  --curve-ink: #a8eef9; /* brighter step, for text and small marks only */
+  --curve-fill: rgba(134, 227, 242, 0.13);
+  --wash: rgba(134, 227, 242, 0.1);
+  --gust: #ffc880;
 
   --accent: #f2617a; /* chart annotation: now, cautions */
   --good: #5bd8a6;
   --warn: #f2a65a;
   --bad: #f2617a;
+
+  /* Score bands, stepped for this ground rather than flipped from the light
+     ones — a dark palette is chosen, not derived. Validated as a set against
+     #07202E: worst adjacent CVD ΔE 13.1, normal-vision 20.5, all four over
+     3:1. The light theme's "good is the deeper green" is deliberately not
+     mirrored here: on a dark ground deeper means closer to the background,
+     so the better band would read as the weaker one. Depth carries the order
+     there; saturation carries it here. */
+  --tone-prime: #f2c046;
+  --tone-good: #16a84e;
+  --tone-fair: #8fd2bf;
+  --tone-poor: #ef5d72;
+
+  /* The same bands as ground rather than as ink, in the inks' own hues so a
+     block and the number over it read as one thing.
+
+     Two bands here, not three: Fair goes unmarked in the dark the way Poor
+     does in both themes. Three steps could not be told apart on this ground
+     without pushing the top one so light that the tide line vanished into
+     it — the arithmetic is in the note in Spine.tsx. Dropping the weakest
+     one buys the other two the room they needed, and losing it costs least:
+     Fair is the band that means "you could, but".
+
+     Composited over the day ground they run L 0.47 / 0.56 / 0.64 against an
+     unmarked hour, and 0.38 / 0.50 / 0.59 over night — every gap clear of
+     the 0.06 floor, which no three-step version managed on either ground.
+
+     Prime is still where this palette spends its contrast: gold is a light
+     colour, so the strongest band is the lightest surface the curves cross,
+     and there the tide line sits at 2.30:1 rather than 3:1. The line is
+     directly labelled at every turn, which is the relief that buys it. */
+  --wash-prime: rgba(242, 192, 70, 0.46);
+  --wash-good: rgba(63, 216, 154, 0.28);
+  --wash-fair: transparent;
+
+  /* The ground the spine draws on: a panel with its own colour, a long way up
+     from the page. The chart used to have no background of its own — the page's
+     near-black showed through a wash — which left no room between the darkest
+     band and the darkest line. These are flat colours, not layers, so the panel
+     is one value to dial rather than a stack to unpick. */
+  --chart-day: #4b5f69;
+  --chart-night: #35464f;
+
+  /* The day divider, which has to stay legible where it crosses the night
+     band. Over a ground that dark, "stronger" means lighter — the same job the
+     light theme does by going darker than its own night. */
+  --day-edge: rgba(156, 194, 208, 0.5);
 
   --shadow: rgba(0, 0, 0, 0.34);
 
@@ -70,6 +121,27 @@
     --warn: #a86400;
     --bad: #c9315a;
 
+    /* The same four bands on a light ground: gold and the pale green both have
+       to darken to stay legible on paper. */
+    --tone-prime: #8a6410;
+    --tone-good: #0b7a55;
+    --tone-fair: #3f9c76;
+    --tone-poor: #c9315a;
+
+    /* Ground, not ink. The inks above had to darken to stay legible on
+       paper; a wash carries no text, so it keeps the pale hue the band is
+       actually named for. */
+    --wash-prime: rgba(226, 173, 45, 0.26);
+    --wash-good: rgba(23, 166, 115, 0.18);
+    --wash-fair: rgba(120, 206, 171, 0.14);
+
+    /* The same two, on paper. */
+    --chart-day: #f5f8f7;
+    --chart-night: #cbd2d4;
+
+    /* The day divider, a step darker than the night it crosses. */
+    --day-edge: rgba(16, 40, 54, 0.5);
+
     --shadow: rgba(10, 32, 41, 0.14);
   }
 }
@@ -94,6 +166,26 @@
   --good: #0b7a55;
   --warn: #a86400;
   --bad: #c9315a;
+
+  /* The same four bands on a light ground: gold and the pale green both have
+     to darken to stay legible on paper. */
+  --tone-prime: #8a6410;
+  --tone-good: #0b7a55;
+  --tone-fair: #3f9c76;
+  --tone-poor: #c9315a;
+
+  /* Ground, not ink. The inks above had to darken to stay legible on paper;
+     a wash carries no text, so it keeps the pale hue the band is named for. */
+  --wash-prime: rgba(226, 173, 45, 0.26);
+  --wash-good: rgba(23, 166, 115, 0.18);
+  --wash-fair: rgba(120, 206, 171, 0.14);
+
+  /* The same two, on paper. */
+  --chart-day: #f5f8f7;
+  --chart-night: #cbd2d4;
+
+  /* The day divider, a step darker than the night it crosses. */
+  --day-edge: rgba(16, 40, 54, 0.5);
 
   --shadow: rgba(10, 32, 41, 0.14);
 }

@@ -41,7 +41,7 @@ function dawnSpot(): Stats {
       { from: 60, to: 79, samples: 320 },
       { from: 80, to: 100, samples: 90 },
     ],
-    factors: { tide: 0.61, wind: 0.54, wave: 0.7, rain: 0.92 },
+    factors: { tide: 0.61, wind: 0.54, wave: 0.7, weather: 0.92, windDir: 0.7 },
     unfishableShare: 0.06,
   };
 }

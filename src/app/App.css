@@ -250,10 +250,14 @@
   max-width: 58ch;
 }
 
-.tone-prime { color: var(--good); }
-.tone-good { color: var(--curve-ink); }
-.tone-fair { color: var(--warn); }
-.tone-poor { color: var(--dim); }
+/* One scale, four steps: gold for the pick of the week, green for the hours
+   worth going at all — deeper the better it gets — and red for the ones that
+   are not. The gated hours land here too: a tripped gate caps the score at
+   20, which is Poor by arithmetic rather than by a second rule. */
+.tone-prime { color: var(--tone-prime); }
+.tone-good { color: var(--tone-good); }
+.tone-fair { color: var(--tone-fair); }
+.tone-poor { color: var(--tone-poor); }
 
 /* ---------- readings: a band, not four boxes ---------- */
 
@@ -369,9 +373,9 @@
 
 .spine-head {
   display: flex;
-  justify-content: space-between;
   align-items: baseline;
   gap: 12px;
+  flex-wrap: wrap;
   margin: 26px 0 4px;
 }
 
@@ -380,11 +384,115 @@
   font-weight: 500;
 }
 
+/* Third in the row but pushed to the far end, so the picker sits beside the
+   heading it qualifies rather than floating in the middle. */
 .spine-head .cursor-time {
+  margin-left: auto;
   font-family: var(--cond);
   font-size: 13px;
   color: var(--dim);
   font-variant-numeric: tabular-nums;
+}
+
+/* ---------- range picker ---------- */
+
+.range-picker {
+  display: inline-flex;
+  align-self: center;
+}
+
+.range-picker button {
+  appearance: none;
+  background: transparent;
+  color: var(--dim);
+  border: 1px solid var(--rule);
+  font-family: var(--cond);
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 4px 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* One control, not three buttons: the borders are shared. */
+.range-picker button + button {
+  margin-left: -1px;
+}
+
+.range-picker button:first-child {
+  border-radius: 2px 0 0 2px;
+}
+
+.range-picker button:last-child {
+  border-radius: 0 2px 2px 0;
+}
+
+/* Accent marks the current item throughout the app; curve is for the primary
+   action, which this is not. */
+.range-picker button[data-current='true'] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--raised);
+  position: relative; /* over the shared border of its neighbour */
+}
+
+/* ---------- scrubber ---------- */
+
+/* How much of the fetched forecast is on screen, and which part. Inert when
+   the window is as wide as everything held — it still draws, so the row under
+   the chart does not come and go as the range changes. */
+.scrubber {
+  position: relative;
+  height: 20px;
+  margin-top: 8px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  background: var(--rule-soft);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.scrub-thumb {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  min-width: 18px;
+  border: 1px solid var(--curve);
+  border-radius: 2px;
+  background: var(--wash);
+  cursor: grab;
+  touch-action: none;
+}
+
+.scrub-thumb:active {
+  cursor: grabbing;
+}
+
+/* The present, so the window can be put back beside it by eye after a drag. */
+.scrub-now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+/* Fingers, not pointers: both controls grow where there is no hover. */
+@media (hover: none) {
+  .range-picker button {
+    padding: 7px 14px;
+    font-size: 14px;
+  }
+
+  .scrubber {
+    height: 28px;
+  }
+
+  .scrub-thumb {
+    min-width: 30px;
+  }
 }
 
 .spine-holder {

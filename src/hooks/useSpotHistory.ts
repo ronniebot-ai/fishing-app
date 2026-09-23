@@ -3,7 +3,8 @@ import { useEffect, useRef } from 'react';
 import type { SavedSpot } from '../api/spots';
 import { fetchNearby, fetchSpotStats, recordConditions, type NearbySpot, type SpotStats } from '../api/stats';
 import type { LatLon, TimelinePoint } from '../api/types';
-import { snapshotHours } from '../domain/snapshots';
+import type { LightWindow } from '../domain/daylight';
+import { snapshotHours, SNAPSHOT_HOURS } from '../domain/snapshots';
 import type { TideExtreme } from '../domain/tides';
 
 /** History changes slowly. Re-reading it while somebody reads the page is waste. */
@@ -25,6 +26,7 @@ export function useRecordConditions(
   extremes: TideExtreme[],
   utcOffsetSeconds: number,
   now: number,
+  light: LightWindow[] = [],
 ): void {
   const sent = useRef<string | null>(null);
   // `now` ticks every minute; the hours worth keeping only change when the
@@ -34,7 +36,7 @@ export function useRecordConditions(
   useEffect(() => {
     if (!spot || timeline.length === 0) return;
 
-    const hours = snapshotHours(timeline, extremes, hourTick * 3_600_000);
+    const hours = snapshotHours(timeline, extremes, hourTick * 3_600_000, SNAPSHOT_HOURS, light);
     if (hours.length === 0) return;
 
     const key = `${spot.id}:${hours[0].at}`;
@@ -42,7 +44,7 @@ export function useRecordConditions(
     sent.current = key;
 
     void recordConditions(spot.id, utcOffsetSeconds, hours);
-  }, [spot, timeline, extremes, utcOffsetSeconds, hourTick]);
+  }, [spot, timeline, extremes, utcOffsetSeconds, hourTick, light]);
 }
 
 export interface SpotHistory {

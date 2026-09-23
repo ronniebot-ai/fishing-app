@@ -29,7 +29,7 @@ function withHistory(over: Partial<Stats> = {}): Stats {
       { hour: 6, avgScore: 88, bestScore: 97, samples: 100 },
       { hour: 17, avgScore: 52, bestScore: 71, samples: 100 },
     ],
-    factors: { tide: 0.6, wind: 0.5, wave: 0.7, rain: 0.9 },
+    factors: { tide: 0.6, wind: 0.5, wave: 0.7, weather: 0.9, windDir: 0.7 },
     ...over,
   };
 }

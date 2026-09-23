@@ -38,12 +38,20 @@ export interface ConditionDoc {
   score: number;
   unfishable: boolean;
   /** Each 0-1, the normalised factors behind the score. */
-  factors: { tide: number | null; wind: number | null; wave: number | null; rain: number | null };
+  factors: {
+    tide: number | null;
+    wind: number | null;
+    wave: number | null;
+    weather: number | null;
+    windDir: number | null;
+  };
   windKn: number | null;
   gustKn: number | null;
   waveM: number | null;
+  swellM: number | null;
   tideRate: number | null;
   rainMm: number | null;
+  cloudPct: number | null;
 }
 
 export function conditions(db: Db): Collection<ConditionDoc> {
@@ -105,13 +113,16 @@ function readHour(raw: unknown, tz: string, capturedAt: Date, spotId: ObjectId) 
       tide: readUnit(factors.tide, 'factors.tide'),
       wind: readUnit(factors.wind, 'factors.wind'),
       wave: readUnit(factors.wave, 'factors.wave'),
-      rain: readUnit(factors.rain, 'factors.rain'),
+      weather: readUnit(factors.weather, 'factors.weather'),
+      windDir: readUnit(factors.windDir, 'factors.windDir'),
     },
     windKn: readOptional(hour?.windKn, 'windKn'),
     gustKn: readOptional(hour?.gustKn, 'gustKn'),
     waveM: readOptional(hour?.waveM, 'waveM'),
+    swellM: readOptional(hour?.swellM, 'swellM'),
     tideRate: readOptional(hour?.tideRate, 'tideRate'),
     rainMm: readOptional(hour?.rainMm, 'rainMm'),
+    cloudPct: readOptional(hour?.cloudPct, 'cloudPct'),
   };
 }
 
@@ -199,7 +210,7 @@ export interface SpotStats {
   /** How the scores fall across the bands the UI colours by. */
   distribution: { from: number; to: number; samples: number }[];
   /** Mean contribution of each factor, 0-1. Null when there is nothing to average. */
-  factors: { tide: number; wind: number; wave: number; rain: number } | null;
+  factors: { tide: number; wind: number; wave: number; weather: number; windDir: number } | null;
   /** Share of hours the gates called unfishable, 0-1. */
   unfishableShare: number;
 }
@@ -230,7 +241,7 @@ export async function spotStats(db: Db, rawSpotId: unknown, days = STATS_DAYS): 
     .aggregate<{
       byHour: HourStat[];
       distribution: { _id: number | string; samples: number }[];
-      factors: { tide: number; wind: number; wave: number; rain: number }[];
+      factors: { tide: number; wind: number; wave: number; weather: number; windDir: number }[];
       totals: { samples: number; unfishable: number }[];
     }>([
       { $match: { spotId: new ObjectId(rawSpotId), at: { $gte: since } } },
@@ -275,7 +286,8 @@ export async function spotStats(db: Db, rawSpotId: unknown, days = STATS_DAYS): 
                 tide: { $avg: '$factors.tide' },
                 wind: { $avg: '$factors.wind' },
                 wave: { $avg: '$factors.wave' },
-                rain: { $avg: '$factors.rain' },
+                weather: { $avg: '$factors.weather' },
+                windDir: { $avg: '$factors.windDir' },
               },
             },
             { $project: { _id: 0 } },

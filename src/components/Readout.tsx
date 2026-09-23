@@ -62,12 +62,15 @@ export function Readout({ point, score, extremes, utcOffsetSeconds }: ReadoutPro
           .filter(Boolean)
           .join(', ');
 
+  // Swell rather than the combined sea, because that is what the score reads:
+  // a row showing one number while the hairline under it measures another is
+  // worse than showing neither.
   const swellNote =
-    point.waveHeight === null
+    point.swellHeight === null
       ? undefined
       : [
-          bearingWord(point.waveDir) ?? null,
-          point.wavePeriod !== null ? `${point.wavePeriod.toFixed(0)} second period` : null,
+          bearingWord(point.swellDir) ?? null,
+          point.swellPeriod !== null ? `${point.swellPeriod.toFixed(0)} second period` : null,
         ]
           .filter(Boolean)
           .join(', ');
@@ -87,12 +90,18 @@ export function Readout({ point, score, extremes, utcOffsetSeconds }: ReadoutPro
     );
   }
 
-  const rainNote =
+  // Rain is the note under the cloud rather than a row of its own: it is what
+  // decides the factor when it falls, and silence the rest of the time.
+  const weatherNote = [
+    point.precip !== null && point.precip >= 0.05 ? `${point.precip.toFixed(1)} mm this hour` : null,
     point.precipProb === null
-      ? undefined
+      ? null
       : point.precipProb < 5
-        ? 'nothing forecast'
-        : `${Math.round(point.precipProb)}% chance this hour`;
+        ? 'no rain forecast'
+        : `${Math.round(point.precipProb)}% chance of rain`,
+  ]
+    .filter(Boolean)
+    .join(', ') || undefined;
 
   return (
     <div className="readout">
@@ -105,7 +114,7 @@ export function Readout({ point, score, extremes, utcOffsetSeconds }: ReadoutPro
       />
       <Row
         label="Swell"
-        value={point.waveHeight === null ? null : point.waveHeight.toFixed(1)}
+        value={point.swellHeight === null ? null : point.swellHeight.toFixed(1)}
         unit="m"
         note={swellNote}
         contribution={factor('wave')}
@@ -124,13 +133,11 @@ export function Readout({ point, score, extremes, utcOffsetSeconds }: ReadoutPro
         missing="inland"
       />
       <Row
-        label="Rain"
-        value={
-          point.precip === null ? null : point.precip < 0.05 ? 'none' : point.precip.toFixed(1)
-        }
-        unit={point.precip !== null && point.precip >= 0.05 ? 'mm' : undefined}
-        note={rainNote}
-        contribution={factor('rain')}
+        label="Weather"
+        value={point.cloudCover === null ? null : String(Math.round(point.cloudCover))}
+        unit={point.cloudCover === null ? undefined : '% cloud'}
+        note={weatherNote}
+        contribution={factor('weather')}
       />
     </div>
   );

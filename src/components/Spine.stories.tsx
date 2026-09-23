@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { extremes, NOW, SYDNEY_UTC_OFFSET, timeline, windows } from '../fixtures/conditions';
+import { extremes, NOW, sunrises, sunsets, SYDNEY_UTC_OFFSET, timeline } from '../fixtures/conditions';
 import { Spine } from './Spine';
 
 /**
@@ -9,9 +9,9 @@ import { Spine } from './Spine';
  * the canvas rather than zooming it — a zoom scales the type along with the
  * curves and hides exactly the crowding this drawing is prone to.
  *
- * The window bands are the thing to watch when changing anything here: they
+ * The night bands are the thing to watch when changing anything here: they
  * have to run the full height of all three panels, because that is the claim
- * the shared axis is making.
+ * the shared axis is making — dawn reaches tide, wind and rain at once.
  */
 const meta = {
   title: 'Instrument/Spine',
@@ -19,7 +19,8 @@ const meta = {
   args: {
     points: timeline,
     extremes,
-    windows,
+    sunrises,
+    sunsets,
     utcOffsetSeconds: SYDNEY_UTC_OFFSET,
     now: NOW,
   },
@@ -44,7 +45,6 @@ export const NoMarineData: Story = {
   args: {
     points: timeline.map((p) => ({ ...p, tideHeight: null, tideRate: null })),
     extremes: [],
-    windows: [],
   },
 };
 
@@ -56,6 +56,5 @@ export const BlownOut: Story = {
       windSpeed: (p.windSpeed ?? 0) + 16,
       windGust: (p.windGust ?? 0) + 20,
     })),
-    windows: [],
   },
 };

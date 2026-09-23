@@ -1,10 +1,12 @@
 import { FAR_ANCHOR_KM, type SnapResult } from '../api/oceanSnap';
 import type { LatLon, TimelinePoint } from '../api/types';
+import type { LightWindow } from './daylight';
 import { describeConditions } from './describe';
 import { scoreHour, type FishingWindow } from './score';
 import { currentIndex } from './timeline';
 import type { TideExtreme } from './tides';
 import {
+  epochToSpotDay,
   epochToSpotTime,
   formatDay,
   formatHour,
@@ -23,6 +25,8 @@ export interface ChatContextInput {
   timeline: TimelinePoint[];
   extremes: TideExtreme[];
   windows: FishingWindow[];
+  /** The dawn and dusk windows, so the assistant's scores match the page's. */
+  light: LightWindow[];
   snap: SnapResult | null;
   utcOffsetSeconds: number;
   timezone: string;
@@ -48,9 +52,9 @@ function signed(metres: number): string {
  * an absent field reads as absent, where a placeholder invites the assistant
  * to talk about it.
  */
-function hourLine(point: TimelinePoint, extremes: TideExtreme[]): string {
+function hourLine(point: TimelinePoint, extremes: TideExtreme[], light: LightWindow[]): string {
   const parts = [`${formatDay(point.time)} ${formatHour(point.time)}`];
-  parts.push(`score ${scoreHour(point, extremes).score}`);
+  parts.push(`score ${scoreHour(point, extremes, light).score}`);
 
   if (point.windSpeed !== null) {
     const gust = point.windGust === null ? '' : `, gusting ${Math.round(point.windGust)}`;
@@ -90,7 +94,7 @@ function hourLine(point: TimelinePoint, extremes: TideExtreme[]): string {
  */
 export function buildChatContext(input: ChatContextInput): string {
   const {
-    spot, spotName, timeline, extremes, windows, snap,
+    spot, spotName, timeline, extremes, windows, light, snap,
     utcOffsetSeconds, timezone, now,
   } = input;
 
@@ -124,12 +128,12 @@ export function buildChatContext(input: ChatContextInput): string {
   }
 
   if (current) {
-    const score = scoreHour(current, extremes);
+    const score = scoreHour(current, extremes, light);
     lines.push('', 'NOW');
     lines.push(`${formatDay(current.time)} ${formatHour(current.time)} local`);
     lines.push(`Score ${score.score}/100 (${scoreBand(score.score).label})`);
     lines.push(
-      describeConditions(current, extremes, timeline, now, utcOffsetSeconds, score.score),
+      describeConditions(current, extremes, timeline, now, utcOffsetSeconds, score.score, light),
     );
     if (score.gateReason) {
       lines.push(`Unfishable: ${score.gateReason}. The score is capped regardless of everything else.`);
@@ -141,30 +145,47 @@ export function buildChatContext(input: ChatContextInput): string {
   }
 
   lines.push('', `HOURLY, NEXT ${HORIZON_HOURS} HOURS`);
-  for (const point of ahead) lines.push(hourLine(point, extremes));
+  for (const point of ahead) lines.push(hourLine(point, extremes, light));
 
   const from = current?.t ?? now;
-  const turns = extremes.filter((e) => e.t >= from && e.t <= from + HORIZON_HOURS * 3600_000);
+  const horizonEnd = from + HORIZON_HOURS * 3600_000;
+  /** A time far enough out that a bare clock reading would be read as tomorrow. */
+  const stamp = (t: number) =>
+    `${epochToSpotDay(t, utcOffsetSeconds, 'short')} ${epochToSpotTime(t, utcOffsetSeconds)}`;
+
+  const turns = extremes.filter((e) => e.t >= from && e.t <= horizonEnd);
   lines.push('', 'TIDE TURNS');
   if (turns.length === 0) {
     lines.push('None in range.');
   } else {
     for (const turn of turns) {
       lines.push(
-        `${turn.kind === 'high' ? 'High' : 'Low'} ${epochToSpotTime(turn.t, utcOffsetSeconds)} at ${signed(turn.height)}`,
+        `${turn.kind === 'high' ? 'High' : 'Low'} ${stamp(turn.t)} at ${signed(turn.height)}`,
       );
     }
   }
 
+  // Only the windows this block has hourly readings behind. The app searches
+  // as far ahead as the chart is set to show, which can be a week; a window
+  // listed here that the HOURLY section stops short of would be a score with
+  // nothing under it, and the times carry no year — "5:00am" three days out
+  // reads as tomorrow morning and gets answered as if it were.
+  const inRange = windows.filter((w) => w.startT <= horizonEnd);
+
   lines.push('', 'BEST WINDOWS (the app’s own pick, strongest first)');
-  if (windows.length === 0) {
+  if (inRange.length === 0) {
     lines.push('None — nothing in range scores well enough to call a window.');
   } else {
-    for (const window of windows) {
+    for (const window of inRange) {
       lines.push(
-        `${epochToSpotTime(window.startT, utcOffsetSeconds)} to ${epochToSpotTime(window.endT, utcOffsetSeconds)}, averaging ${window.score}/100, best at ${epochToSpotTime(window.peakT, utcOffsetSeconds)}`,
+        `${stamp(window.startT)} to ${epochToSpotTime(window.endT, utcOffsetSeconds)}, averaging ${window.score}/100, best at ${epochToSpotTime(window.peakT, utcOffsetSeconds)}`,
       );
     }
+  }
+  if (inRange.length < windows.length) {
+    lines.push(
+      `The app found ${windows.length - inRange.length} more beyond the ${HORIZON_HOURS} hours above. Say that rather than describing them.`,
+    );
   }
 
   return lines.join('\n');

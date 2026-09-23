@@ -21,10 +21,12 @@ describe('WhenToGo', () => {
   it('lists the windows strongest first', () => {
     renderWindows();
 
+    // The evening window leads: last light with the tide a third of the way
+    // out is the only combination that clears the off-peak cap.
     expect(bodyRows().map((r) => within(r).getAllByRole('cell')[3].textContent)).toEqual([
-      '88',
-      '78',
-      '67',
+      '83',
+      '65',
+      '59',
     ]);
   });
 
@@ -32,12 +34,13 @@ describe('WhenToGo', () => {
     renderWindows();
 
     const cells = within(bodyRows()[0]).getAllByRole('cell');
-    expect(cells[1]).toHaveTextContent('11:00am – 4:00pm');
-    expect(cells[2]).toHaveTextContent('2:00pm');
+    expect(cells[1]).toHaveTextContent('5:00pm – 8:00pm');
+    expect(cells[2]).toHaveTextContent('6:00pm');
   });
 
   it('labels the window containing `now` as Now, and dates the rest', () => {
-    renderWindows();
+    // 6pm, inside the leading 5-8pm window.
+    renderWindows(NOW + 3 * 3_600_000);
 
     const days = bodyRows().map((r) => within(r).getAllByRole('cell')[0].textContent);
     expect(days).toEqual(['Now', 'Today', 'Today']);
@@ -46,11 +49,11 @@ describe('WhenToGo', () => {
   });
 
   it('drops the Now label once the clock has moved past the window', () => {
-    // 9pm — inside the second window, which should take the label over.
-    renderWindows(NOW + 6 * 3_600_000);
+    // Midday, which falls in the third window rather than the first.
+    renderWindows(NOW - 3 * 3_600_000);
 
     const days = bodyRows().map((r) => within(r).getAllByRole('cell')[0].textContent);
-    expect(days).toEqual(['Today', 'Now', 'Today']);
+    expect(days).toEqual(['Today', 'Today', 'Now']);
   });
 
   it('explains itself instead of listing nothing', () => {

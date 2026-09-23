@@ -1,4 +1,5 @@
 import type { TimelinePoint } from '../api/types';
+import type { LightWindow } from './daylight';
 import { scoreHour, type FactorKey } from './score';
 import type { TideExtreme } from './tides';
 
@@ -24,8 +25,11 @@ export interface SnapshotHour {
   windKn: number | null;
   gustKn: number | null;
   waveM: number | null;
+  /** The swell the score actually read, alongside the combined sea above. */
+  swellM: number | null;
   tideRate: number | null;
   rainMm: number | null;
+  cloudPct: number | null;
 }
 
 /**
@@ -41,6 +45,7 @@ export function snapshotHours(
   extremes: TideExtreme[],
   now: number,
   hours: number = SNAPSHOT_HOURS,
+  light: LightWindow[] = [],
 ): SnapshotHour[] {
   const out: SnapshotHour[] = [];
 
@@ -48,7 +53,7 @@ export function snapshotHours(
     if (point.t < now) continue;
     if (out.length >= hours) break;
 
-    const scored = scoreHour(point, extremes);
+    const scored = scoreHour(point, extremes, light);
     // `partial` means the score was assembled from an incomplete reading. It
     // is honest enough to show with a caveat, but not to average over later.
     if (scored.partial) continue;
@@ -64,8 +69,10 @@ export function snapshotHours(
       windKn: point.windSpeed,
       gustKn: point.windGust,
       waveM: point.waveHeight,
+      swellM: point.swellHeight,
       tideRate: point.tideRate,
       rainMm: point.precip,
+      cloudPct: point.cloudCover,
     });
   }
 

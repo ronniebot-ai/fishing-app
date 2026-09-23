@@ -27,17 +27,22 @@ const MARINE_HOURLY = [
   'wave_direction',
   'swell_wave_height',
   'swell_wave_period',
+  'swell_wave_direction',
   'sea_level_height_msl',
 ].join(',');
 
 const FORECAST_HOURLY = [
   'temperature_2m',
+  'cloud_cover',
   'precipitation',
   'precipitation_probability',
   'wind_speed_10m',
   'wind_direction_10m',
   'wind_gusts_10m',
 ].join(',');
+
+/** Only what the spine shades with. The daily block is one row per day. */
+const FORECAST_DAILY = ['sunrise', 'sunset'].join(',');
 
 const FORECAST_CURRENT = [
   'wind_speed_10m',
@@ -124,6 +129,7 @@ export async function fetchForecast(
     latitude: String(point.lat),
     longitude: String(point.lon),
     hourly: FORECAST_HOURLY,
+    daily: FORECAST_DAILY,
     current: FORECAST_CURRENT,
     timezone: 'auto',
     forecast_days: String(FORECAST_DAYS),

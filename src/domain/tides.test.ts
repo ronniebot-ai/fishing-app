@@ -22,9 +22,9 @@ function timeline(heights: (number | null)[]): TimelinePoint[] {
     time: `2026-09-07T${String(i).padStart(2, '0')}:00`,
     t: BASE + i * HOUR,
     windSpeed: null, windGust: null, windDir: null,
-    precip: null, precipProb: null, temp: null,
+    precip: null, precipProb: null, cloudCover: null, temp: null,
     waveHeight: null, wavePeriod: null, waveDir: null,
-    swellHeight: null, swellPeriod: null,
+    swellHeight: null, swellPeriod: null, swellDir: null,
     tideHeight: h,
     tideRate: null,
   }));

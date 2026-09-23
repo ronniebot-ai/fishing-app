@@ -1,4 +1,5 @@
 import type { TimelinePoint } from '../api/types';
+import type { LightWindow } from './daylight';
 import { scoreHour } from './score';
 import type { TideExtreme } from './tides';
 import { epochToSpotTime } from './units';
@@ -37,6 +38,7 @@ function holdsUntil(
   now: number,
   currentScore: number,
   utcOffsetSeconds: number,
+  light: LightWindow[] = [],
 ): string | null {
   // Only worth saying when there is something good to lose.
   if (currentScore < 55) return null;
@@ -44,7 +46,7 @@ function holdsUntil(
 
   const forward = timeline.filter((p) => p.t >= now);
   for (let i = 1; i < forward.length; i++) {
-    if (scoreHour(forward[i], extremes).score < floor) {
+    if (scoreHour(forward[i], extremes, light).score < floor) {
       return epochToSpotTime(forward[i].t, utcOffsetSeconds);
     }
   }
@@ -64,6 +66,7 @@ export function describeConditions(
   now: number,
   utcOffsetSeconds: number,
   score: number,
+  light: LightWindow[] = [],
 ): string {
   const parts: string[] = [];
 
@@ -96,7 +99,7 @@ export function describeConditions(
       ? `${parts.join(', ').replace(/^./, (c) => c.toUpperCase())}.`
       : 'Conditions unavailable.';
 
-  const until = holdsUntil(timeline, extremes, now, score, utcOffsetSeconds);
+  const until = holdsUntil(timeline, extremes, now, score, utcOffsetSeconds, light);
   if (until) sentence += ` Holds until about ${until}.`;
 
   return sentence;
