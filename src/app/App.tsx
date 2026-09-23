@@ -1,6 +1,6 @@
 'use client';
 
-import { Alert, Skeleton } from 'antd';
+import { Alert, Modal, Skeleton } from 'antd';
 import dynamic from 'next/dynamic';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import './App.css';
@@ -8,14 +8,17 @@ import { FAR_ANCHOR_KM } from '../api/oceanSnap';
 import { findSaved } from '../api/spots';
 import type { LatLon } from '../api/types';
 import { LoginModal } from '../components/LoginModal';
+import { RangePicker } from '../components/RangePicker';
 import { Readout } from '../components/Readout';
 import { SaveSpot } from '../components/SaveSpot';
 import { SavedSpots } from '../components/SavedSpots';
+import { Scrubber } from '../components/Scrubber';
 import { SpotStats } from '../components/SpotStats';
 import { Spine } from '../components/Spine';
 import { Verdict } from '../components/Verdict';
 import { buildChatContext } from '../domain/chatContext';
 import { describeConditions } from '../domain/describe';
+import { NOW_AT, rangeHours, rangeRoamHours, rangeWindowLimit } from '../domain/range';
 import { scoreHour } from '../domain/score';
 import { parseSpot } from '../domain/spotUrl';
 import { formatDay, formatHour, formatLatLon } from '../domain/units';
@@ -23,6 +26,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useChatAvailable } from '../hooks/useChat';
 import { useConditions } from '../hooks/useConditions';
 import { useNow } from '../hooks/useNow';
+import { useRange } from '../hooks/useRange';
 import { useSavedSpots } from '../hooks/useSavedSpots';
 import { NEARBY_KM, useRecordConditions, useSpotHistory } from '../hooks/useSpotHistory';
 
@@ -62,11 +66,16 @@ export default function App({ initialSpot }: { initialSpot: LatLon | null }) {
   const [mapOpen, setMapOpen] = useState(false);
   const auth = useAuth();
   const [loginOpen, setLoginOpen] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
   // Where to fly the map, set only by choosing a saved spot. Clicking the map
   // must not move it under the user's finger, so `handlePick` leaves this be.
   const [focus, setFocus] = useState<LatLon | null>(null);
   const now = useNow();
-  const conditions = useConditions(spot, now);
+  // How much of the forecast is on screen, and which part of it. Read before
+  // the conditions because the window search is scoped by it.
+  const { range, setRange } = useRange();
+  const hours = rangeHours(range);
+  const conditions = useConditions(spot, now, hours, rangeWindowLimit(range));
   const library = useSavedSpots();
   const savedHere = findSaved(library.spots, spot);
 
@@ -130,7 +139,7 @@ export default function App({ initialSpot }: { initialSpot: LatLon | null }) {
   // `now` here is the clock; the score for the current hour is `nowScore`.
   const {
     snap, timeline, extremes, now: nowScore, nowPoint,
-    windows, utcOffsetSeconds, timezone, isLoading, error,
+    windows, sunrises, sunsets, twilight, light, utcOffsetSeconds, timezone, isLoading, error,
   } = conditions;
 
   // The readings follow the cursor on the spine, falling back to this hour
@@ -140,8 +149,27 @@ export default function App({ initialSpot }: { initialSpot: LatLon | null }) {
     if (cursorT === null || !nowPoint || !nowScore) return { point: nowPoint, score: nowScore };
     const point = timeline.find((p) => p.t === cursorT);
     if (!point) return { point: nowPoint, score: nowScore };
-    return { point, score: scoreHour(point, extremes) };
-  }, [cursorT, timeline, extremes, nowPoint, nowScore]);
+    return { point, score: scoreHour(point, extremes, light) };
+  }, [cursorT, timeline, extremes, light, nowPoint, nowScore]);
+
+  const windowMs = hours * 3_600_000;
+  const dataStart = timeline.length > 0 ? timeline[0].t : now;
+  const dataEnd = timeline.length > 0 ? timeline[timeline.length - 1].t : now;
+  // `now` a third along, pulled back inside the data when the window is wider
+  // than the history behind it — a week does not have a week of past to show.
+  const opening = Math.min(
+    Math.max(now - windowMs * NOW_AT, dataStart),
+    Math.max(dataEnd - windowMs, dataStart),
+  );
+  // The scrubber moves over the range's own reach rather than the whole
+  // forecast, so the bar is as long as the travel it actually offers.
+  const roamEnd = Math.min(dataEnd, opening + windowMs + rangeRoamHours(range) * 3_600_000);
+  // A drag holds until the question changes. Keying the stored position and
+  // comparing it while rendering resets it on a new spot or a new range
+  // without an effect that would set state on the way out of one.
+  const [scrub, setScrub] = useState<{ key: string; startT: number } | null>(null);
+  const scrubKey = `${spot?.lat},${spot?.lon}:${range}`;
+  const startT = scrub?.key === scrubKey ? scrub.startT : opening;
 
   const anchor = snap?.anchor ?? null;
   const anchorFar = snap !== null && anchor !== null && snap.distanceKm > FAR_ANCHOR_KM;
@@ -156,9 +184,9 @@ export default function App({ initialSpot }: { initialSpot: LatLon | null }) {
     return buildChatContext({
       spot,
       spotName: savedHere?.name ?? null,
-      timeline, extremes, windows, snap, utcOffsetSeconds, timezone, now,
+      timeline, extremes, windows, light, snap, utcOffsetSeconds, timezone, now,
     });
-  }, [spot, ready, savedHere?.name, timeline, extremes, windows, snap, utcOffsetSeconds, timezone, now]);
+  }, [spot, ready, savedHere?.name, timeline, extremes, windows, light, snap, utcOffsetSeconds, timezone, now]);
 
   const canAsk = useChatAvailable();
 
@@ -166,7 +194,7 @@ export default function App({ initialSpot }: { initialSpot: LatLon | null }) {
   // recording is fire-and-forget: nothing here waits for it or shows when it
   // fails, because a missed batch costs a statistic and the next visit sends
   // the same hours again.
-  useRecordConditions(savedHere, timeline, extremes, utcOffsetSeconds, now);
+  useRecordConditions(savedHere, timeline, extremes, utcOffsetSeconds, now, light);
   const history = useSpotHistory(savedHere, spot);
 
   // Without a spot the map is the only thing to do, so it takes the screen.
@@ -191,7 +219,7 @@ export default function App({ initialSpot }: { initialSpot: LatLon | null }) {
             {auth.loggedIn ? (
               <>
                 <span className="account-name">Admin</span>
-                <button type="button" onClick={auth.logout}>
+                <button type="button" onClick={() => setConfirmLogout(true)}>
                   Log out
                 </button>
               </>
@@ -307,7 +335,7 @@ export default function App({ initialSpot }: { initialSpot: LatLon | null }) {
             <Verdict
               score={nowScore}
               summary={describeConditions(
-                nowPoint, extremes, timeline, now, utcOffsetSeconds, nowScore.score,
+                nowPoint, extremes, timeline, now, utcOffsetSeconds, nowScore.score, light,
               )}
             />
 
@@ -319,7 +347,8 @@ export default function App({ initialSpot }: { initialSpot: LatLon | null }) {
             />
 
             <div className="spine-head">
-              <h2>Next two days</h2>
+              <h2>Tide, wind and rain</h2>
+              <RangePicker range={range} onChange={setRange} />
               <span className="cursor-time">
                 {cursorT === null
                   ? `${formatHour(nowPoint.time)} · now`
@@ -330,10 +359,25 @@ export default function App({ initialSpot }: { initialSpot: LatLon | null }) {
             <Spine
               points={timeline}
               extremes={extremes}
-              windows={windows}
+              sunrises={sunrises}
+              sunsets={sunsets}
+              twilight={twilight}
+              light={light}
               utcOffsetSeconds={utcOffsetSeconds}
               now={now}
+              hours={hours}
+              startT={startT}
               onCursor={setCursorT}
+            />
+
+            <Scrubber
+              dataStart={opening}
+              dataEnd={roamEnd}
+              startT={startT}
+              hours={hours}
+              now={now}
+              utcOffsetSeconds={utcOffsetSeconds}
+              onScrub={(t) => setScrub({ key: scrubKey, startT: t })}
             />
 
             <div className="spine-foot">
@@ -348,7 +392,7 @@ export default function App({ initialSpot }: { initialSpot: LatLon | null }) {
                 </span>
                 <span className="now">| now</span>
               </div>
-              <span>Shaded hours are worth fishing · dashed line marks 25 knots</span>
+              <span>Colour marks the score, grey marks the night · dashed line marks 25 knots</span>
             </div>
 
             <Suspense fallback={<Skeleton className="tables-loading" active paragraph={{ rows: 4 }} />}>
@@ -389,6 +433,20 @@ export default function App({ initialSpot }: { initialSpot: LatLon | null }) {
         onClose={() => setLoginOpen(false)}
         onLogin={auth.login}
       />
+
+      <Modal
+        title="Log out?"
+        open={confirmLogout}
+        onOk={() => {
+          auth.logout();
+          setConfirmLogout(false);
+        }}
+        onCancel={() => setConfirmLogout(false)}
+        okText="Log out"
+        cancelText="Cancel"
+      >
+        <p>You will need to log back in to save, rename, or remove spots.</p>
+      </Modal>
     </div>
   );
 }

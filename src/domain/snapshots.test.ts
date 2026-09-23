@@ -48,7 +48,7 @@ describe('snapshotHours', () => {
 
   it('carries every factor the score was built from', () => {
     const [first] = snapshotHours(timeline, extremes, START, 1);
-    expect(Object.keys(first.factors).sort()).toEqual(['rain', 'tide', 'wave', 'wind']);
+    expect(Object.keys(first.factors).sort()).toEqual(['tide', 'wave', 'weather', 'wind', 'windDir']);
   });
 
   it('carries the readings behind the score, not just the score', () => {

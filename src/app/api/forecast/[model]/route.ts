@@ -35,6 +35,7 @@ const ALLOWED = [
   'latitude',
   'longitude',
   'hourly',
+  'daily',
   'current',
   'timezone',
   'forecast_days',

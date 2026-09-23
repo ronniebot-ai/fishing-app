@@ -39,18 +39,20 @@ describe('Readout', () => {
     renderCoastal();
 
     expect(row('Wind')).toHaveTextContent('7kn');
-    expect(row('Swell')).toHaveTextContent('0.8m');
+    // The swell, not the combined sea: it is the height the score reads.
+    expect(row('Swell')).toHaveTextContent('0.6m');
     expect(row('Tide')).toHaveTextContent('+0.83m');
-    // Rain below the resolution of the forecast reads as a word, not "0.0mm".
-    expect(row('Rain')).toHaveTextContent('none');
-    expect(row('Rain')).not.toHaveTextContent('mm');
+    expect(row('Weather')).toHaveTextContent('22% cloud');
+    // A dry hour says so in the note rather than printing "0.0mm".
+    expect(row('Weather')).toHaveTextContent('no rain forecast');
+    expect(row('Weather')).not.toHaveTextContent('mm');
   });
 
   it('spells out direction and gust rather than repeating the number', () => {
     renderCoastal();
 
     expect(row('Wind')).toHaveTextContent('south-easterly, gusting 13');
-    expect(row('Swell')).toHaveTextContent('south-easterly, 9 second period');
+    expect(row('Swell')).toHaveTextContent('south-easterly, 11 second period');
   });
 
   it('says which way the tide is running and when it turns', () => {
@@ -65,7 +67,9 @@ describe('Readout', () => {
     // Wind scored a clean 1, so its hairline runs the full width. This is the
     // only thing making the headline score accountable on screen.
     expect(row('Wind').style.getPropertyValue('--contrib')).toBe('100%');
-    expect(row('Rain').style.getPropertyValue('--contrib')).toBe('92%');
+    // Weather is cloud capped by rain; this hour is bright and dry, which is
+    // the middle of that scale rather than the top of it.
+    expect(row('Weather').style.getPropertyValue('--contrib')).toBe('59.4%');
   });
 
   it('marks marine rows "inland" when no ocean cell was reachable', () => {

@@ -1,6 +1,7 @@
 import type { TimelinePoint } from '../api/types';
 import { findBestWindows, scoreHour } from '../domain/score';
 import { wallClockToEpoch } from '../domain/timeline';
+import { lightWindows, twilightMs } from '../domain/daylight';
 import { deriveTideRates, findTideExtremes } from '../domain/tides';
 
 /**
@@ -38,6 +39,13 @@ const WAVE_HEIGHT = [
   0.9, 1.0, 1.1, 1.3, 1.5, 1.7, 1.9, 2.0,
 ];
 
+/** Overcast dawn burning off to a bright afternoon, clouding over at dusk. */
+const CLOUD_COVER = [
+  95, 95, 92, 90, 88, 85, 80, 72,
+  60, 45, 30, 20, 15, 12, 15, 22,
+  35, 48, 62, 75, 84, 90, 93, 95,
+];
+
 /** Rain clears through the morning. */
 const PRECIP_PROB = [
   60, 55, 50, 45, 40, 35, 25, 20,
@@ -58,12 +66,15 @@ function buildTimeline(): TimelinePoint[] {
     windDir: 155,
     precip: PRECIP_PROB[i] > 30 ? 0.6 : 0,
     precipProb: PRECIP_PROB[i],
+    cloudCover: CLOUD_COVER[i],
     temp: 18,
     waveHeight: WAVE_HEIGHT[i],
     wavePeriod: 9,
     waveDir: 140,
     swellHeight: WAVE_HEIGHT[i] * 0.8,
     swellPeriod: 11,
+    // South-easterly, the prevailing swell on this coast.
+    swellDir: 140,
     tideHeight,
     tideRate: rates[i],
   }));
@@ -72,17 +83,41 @@ function buildTimeline(): TimelinePoint[] {
 export const timeline = buildTimeline();
 export const extremes = findTideExtremes(timeline);
 
-/** 3pm: the calm end of the day, and the best of the conditions. */
+/** Sydney's latitude, so the twilight length matches the sun times below. */
+export const SYDNEY_LAT = -33.8908;
+
+/**
+ * Sydney in early September, a fortnight before daylight saving: the sun is
+ * up a little after six and down before six. Stated rather than derived, the
+ * way the readings above are — the spine only wants two instants.
+ */
+export const sunrises = [wallClockToEpoch('2026-09-07T06:14', SYDNEY_UTC_OFFSET)];
+export const sunsets = [wallClockToEpoch('2026-09-07T17:39', SYDNEY_UTC_OFFSET)];
+
+/**
+ * The dawn and dusk windows, roughly 5:18-7:18am and 4:34-6:34pm.
+ *
+ * Every score below is built with these, because every score in the app is:
+ * a fixture that skipped them would be a day where every hour could reach
+ * Prime, which is not a day this app can produce.
+ */
+export const light = lightWindows(sunrises, sunsets, twilightMs(SYDNEY_LAT, sunrises[0]));
+
+/** 3pm: calm and bright, but hours off the light — a capped afternoon. */
 export const nowPoint = timeline[15];
 export const NOW = nowPoint.t;
-export const score = scoreHour(nowPoint, extremes);
+export const score = scoreHour(nowPoint, extremes, light);
+
+/** 6pm: last light with the tide a third of the way out. The day's best. */
+export const primePoint = timeline[18];
+export const primeScore = scoreHour(primePoint, extremes, light);
 
 /** Ranked from the start of the day so all three windows fall in the horizon. */
-export const windows = findBestWindows(timeline, extremes, { now: timeline[0].t });
+export const windows = findBestWindows(timeline, extremes, { now: timeline[0].t, light });
 
-/** The blustery dawn — the roughest hour on the timeline, and only "Fair". */
+/** Midnight, blowing 22 kn at the top of the tide — the worst hour here. */
 export const roughPoint = timeline[0];
-export const roughScore = scoreHour(roughPoint, extremes);
+export const roughScore = scoreHour(roughPoint, extremes, light);
 
 /**
  * A hard gate tripped — wind past the point where the score stops mattering.

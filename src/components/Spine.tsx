@@ -1,8 +1,10 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { TimelinePoint } from '../api/types';
-import type { FishingWindow } from '../domain/score';
+import { nightSpans, type LightWindow } from '../domain/daylight';
+import { NOW_AT } from '../domain/range';
+import { scoreRuns } from '../domain/score';
 import type { TideExtreme } from '../domain/tides';
-import { epochToSpotTime } from '../domain/units';
+import { epochToSpotDay, epochToSpotTime, spotDaySpans } from '../domain/units';
 import { useElementWidth } from '../hooks/useElementWidth';
 
 const HOUR = 3600_000;
@@ -13,6 +15,8 @@ const CUTOFF_KN = 25;
 const PAD_L = 42;
 const PAD_R = 14;
 const TOP = 16;
+/** A strip above the drawing naming each day it covers. */
+const H_DAYS = 24;
 const H_TIDE = 130;
 const H_WIND = 88;
 const H_RAIN = 50;
@@ -22,10 +26,26 @@ const GAP = 10;
 interface SpineProps {
   points: TimelinePoint[];
   extremes: TideExtreme[];
-  windows: FishingWindow[];
+  /** Sun crossings as instants. Without them nothing is shaded. */
+  sunrises?: number[];
+  sunsets?: number[];
+  /**
+   * How long civil twilight lasts here. Given, the night fades in over dusk
+   * and out over dawn rather than starting at a line; null or absent, it
+   * keeps the hard edge.
+   */
+  twilight?: number | null;
+  /** The dawn and dusk windows, which the score bands depend on. */
+  light?: LightWindow[];
   utcOffsetSeconds: number;
   now: number;
+  /** The whole visible span, not the part ahead of `now`. */
   hours?: number;
+  /**
+   * The instant at the left edge, from the scrubber. Left out, the window
+   * opens with `now` a third along — where it sat when it could not be moved.
+   */
+  startT?: number;
   /**
    * The instant under the cursor, or null when it leaves. The readings above
    * follow this, which is the whole reason the panels share an axis.
@@ -50,21 +70,28 @@ interface SpineProps {
 export function Spine({
   points,
   extremes,
-  windows,
+  sunrises = [],
+  sunsets = [],
+  twilight,
+  light = [],
   utcOffsetSeconds,
   now,
-  hours = 48,
+  hours = 72,
+  startT,
   onCursor,
 }: SpineProps) {
   const holder = useRef<HTMLDivElement>(null);
+  // `useId` puts colons in the value, which a url(#...) reference cannot use.
+  const gid = useId().replace(/:/g, '');
   const width = useElementWidth(holder);
   const [cursorT, setCursorT] = useState<number | null>(null);
 
   // A third of the drawing is where you have been, two thirds where you are
-  // headed — half of the forward window looks back, which puts `now` at the
-  // 1/3 mark rather than pinned to the left edge.
-  const pastHours = hours / 2;
-  const slice = points.filter((p) => p.t >= now - pastHours * HOUR && p.t <= now + hours * HOUR);
+  // headed. That is the opening position rather than the shape of the thing:
+  // once the reader moves the window, `startT` says where it went.
+  const windowMs = hours * HOUR;
+  const from = startT ?? now - windowMs * NOW_AT;
+  const slice = points.filter((p) => p.t >= from && p.t <= from + windowMs);
   if (slice.length < 3) return null;
 
   const tidal = slice.filter((p) => p.tideHeight !== null);
@@ -72,8 +99,9 @@ export function Spine({
   // and wind and rain close the gap.
   const hasTide = tidal.length >= 3;
 
-  const topTide = TOP;
-  const topWind = hasTide ? topTide + H_TIDE + GAP : TOP;
+  const top = TOP + H_DAYS;
+  const topTide = top;
+  const topWind = hasTide ? topTide + H_TIDE + GAP : top;
   const topRain = topWind + H_WIND + GAP;
   const rainBase = topRain + H_RAIN - 8;
   const height = topRain + H_RAIN + H_AXIS;
@@ -126,22 +154,27 @@ export function Spine({
 
   const visibleTurns = extremes.filter((e) => e.t >= t0 && e.t <= t1);
 
-  // Local midnights: the only vertical structure the reader needs, plus a
-  // lighter rule every three hours to make the axis readable at a glance.
-  const ticks: { t: number; midnight: boolean }[] = [];
+  // A light rule every three hours to make the axis readable at a glance.
+  // Midnight is left out of these: the day strip above draws its own divider
+  // and would otherwise put two lines in the same place.
+  const ticks: { t: number }[] = [];
   const first = new Date(t0 + utcOffsetSeconds * 1000);
   const startOfDay = Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), first.getUTCDate());
   // Ticks run from that midnight to t1: at most 24h to reach t0 (startOfDay is
   // t0's own day), then the full span the slice covers from there.
-  for (let h = 0; h <= (pastHours + hours + 24) / 3; h++) {
+  for (let h = 0; h <= (hours + 24) / 3; h++) {
     const t = startOfDay + h * 3 * HOUR - utcOffsetSeconds * 1000;
     if (t <= t0 || t >= t1) continue;
     const local = new Date(t + utcOffsetSeconds * 1000);
-    ticks.push({ t, midnight: local.getUTCHours() === 0 });
+    if (local.getUTCHours() !== 0) ticks.push({ t });
   }
 
   const bandTop = topTide - 8;
   const bandHeight = rainBase - bandTop;
+
+  const nights = nightSpans(sunrises, sunsets, t0, t1);
+  const days = spotDaySpans(t0, t1, utcOffsetSeconds);
+  const runs = scoreRuns(slice, extremes, light);
 
   function report(t: number | null) {
     setCursorT(t);
@@ -186,21 +219,118 @@ export function Spine({
           width={width}
           height={height}
           role="img"
-          aria-label={`Tide, wind and rain over the next ${hours} hours on one time axis, with the hours worth fishing shaded`}
+          aria-label={`Tide, wind and rain over ${hours} hours on one time axis, with the hours worth fishing tinted by score and the hours after sunset shaded`}
           onMouseMove={onMove}
           onMouseLeave={() => report(null)}
         >
-          {/* Window bands run the full height: one band, three readings. */}
-          {windows.map((w) => (
+          {/* The panel's own ground first, then what the hours are worth,
+              then the nights over both — so the dark still reads as dark
+              wherever it falls. All three run the full height, because dawn
+              and the score each reach tide, wind and rain at the same
+              instant, which is the same argument as the shared axis. */}
+          <rect
+            x={PAD_L}
+            y={bandTop}
+            width={inner}
+            height={bandHeight}
+            fill="var(--chart-day)"
+          />
+          {runs.map((r) => {
+            const from = x(Math.max(r.from, t0));
+            const to = x(Math.min(r.to, t1));
+            return (
+              <rect
+                key={r.from}
+                x={from}
+                y={bandTop}
+                width={Math.max(0, to - from)}
+                height={bandHeight}
+                fill={`var(--wash-${r.tone})`}
+              />
+            );
+          })}
+
+          {/* Dusk and dawn are the two ends of the same rectangle, so they
+              are one gradient across it rather than extra bands. An edge the
+              window clipped gets no fade: nothing happened there. */}
+          {twilight ? (
+            <defs>
+              {nights.map((n, i) => {
+                const span = Math.max(n.to - n.from, 1);
+                const step = Math.min(twilight / span, 0.5);
+                const dusk = n.fadeIn ? step : 0;
+                const dawn = n.fadeOut ? step : 0;
+                return (
+                  <linearGradient
+                    key={n.from}
+                    id={`${gid}-night-${i}`}
+                    gradientUnits="userSpaceOnUse"
+                    x1={x(n.from)}
+                    x2={x(n.to)}
+                  >
+                    <stop offset={0} stopColor="var(--chart-night)" stopOpacity={dusk > 0 ? 0 : 1} />
+                    {dusk > 0 && <stop offset={dusk} stopColor="var(--chart-night)" stopOpacity={1} />}
+                    {dawn > 0 && <stop offset={1 - dawn} stopColor="var(--chart-night)" stopOpacity={1} />}
+                    <stop offset={1} stopColor="var(--chart-night)" stopOpacity={dawn > 0 ? 0 : 1} />
+                  </linearGradient>
+                );
+              })}
+            </defs>
+          ) : null}
+          {nights.map((n, i) => (
             <rect
-              key={w.startT}
-              x={x(Math.max(w.startT, t0))}
+              key={n.from}
+              x={x(n.from)}
               y={bandTop}
-              width={Math.max(0, x(Math.min(w.endT, t1)) - x(Math.max(w.startT, t0)))}
+              width={Math.max(0, x(n.to) - x(n.from))}
               height={bandHeight}
-              fill="var(--wash)"
+              fill={twilight ? `url(#${gid}-night-${i})` : 'var(--chart-night)'}
             />
           ))}
+
+          {/* The strip's own rules: one over it and one under, so the day
+              names sit in a band rather than in the chart's own air. */}
+          <line
+            x1={PAD_L}
+            y1={TOP - 5}
+            x2={PAD_L + inner}
+            y2={TOP - 5}
+            stroke="var(--rule)"
+            strokeWidth={1}
+          />
+          <line
+            x1={PAD_L}
+            y1={bandTop}
+            x2={PAD_L + inner}
+            y2={bandTop}
+            stroke="var(--rule)"
+            strokeWidth={1}
+          />
+
+          {/* The days, named across the top. Each label is centred in the part
+              of its day that is actually on screen, and drops to a shorter
+              form — or to nothing — rather than overrunning its neighbour. */}
+          {days.map((d) => {
+            const from = x(d.from);
+            const to = x(d.to);
+            const room = to - from;
+            const style = room >= 74 ? 'full' : room >= 48 ? 'short' : room >= 30 ? 'weekday' : null;
+            if (style === null) return null;
+            return (
+              <text
+                key={d.t}
+                x={(from + to) / 2}
+                y={TOP + 11}
+                fill="var(--dim)"
+                fontSize={11}
+                fontWeight={500}
+                fontFamily="var(--cond)"
+                textAnchor="middle"
+              >
+                {epochToSpotDay(d.t, utcOffsetSeconds, style)}
+              </text>
+            );
+          })}
 
           {ticks.map((tick) => (
             <line
@@ -211,8 +341,25 @@ export function Spine({
               y2={rainBase}
               stroke="var(--rule)"
               strokeWidth={1}
-              strokeDasharray={tick.midnight ? undefined : '2 4'}
-              opacity={tick.midnight ? 0.9 : 0.5}
+              strokeDasharray="2 4"
+              opacity={0.5}
+            />
+          ))}
+
+          {/* Day boundaries, run from the top of the strip to the foot of the
+              rain panel. One line doing the whole height is what makes the
+              strip read as a header over columns rather than as a caption
+              floating above a drawing. */}
+          {days.slice(1).map((d) => (
+            <line
+              key={`edge-${d.t}`}
+              x1={x(d.from)}
+              y1={TOP - 5}
+              x2={x(d.from)}
+              y2={rainBase + 8}
+              stroke="var(--day-edge)"
+              strokeWidth={1}
+              strokeDasharray="5 4"
             />
           ))}
 
@@ -365,14 +512,18 @@ export function Spine({
               strokeDasharray="3 3"
             />
           )}
-          <line
-            x1={x(now)}
-            y1={bandTop}
-            x2={x(now)}
-            y2={rainBase}
-            stroke="var(--accent)"
-            strokeWidth={2.5}
-          />
+          {/* Drawn only while it is on screen: the window can be dragged
+              clear of the present in either direction. */}
+          {now >= t0 && now <= t1 && (
+            <line
+              x1={x(now)}
+              y1={bandTop}
+              x2={x(now)}
+              y2={rainBase}
+              stroke="var(--accent)"
+              strokeWidth={2.5}
+            />
+          )}
         </svg>
       )}
     </div>

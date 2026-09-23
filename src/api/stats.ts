@@ -23,7 +23,7 @@ export interface SpotStats {
   days: number;
   byHour: HourStat[];
   distribution: { from: number; to: number; samples: number }[];
-  factors: { tide: number; wind: number; wave: number; rain: number } | null;
+  factors: { tide: number; wind: number; wave: number; weather: number; windDir: number } | null;
   unfishableShare: number;
 }
 

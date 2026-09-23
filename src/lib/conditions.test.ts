@@ -52,7 +52,7 @@ function hour(at: string, over: Record<string, unknown> = {}) {
     at,
     score: 60,
     unfishable: false,
-    factors: { tide: 0.8, wind: 0.6, wave: 0.5, rain: 1 },
+    factors: { tide: 0.8, wind: 0.6, wave: 0.5, weather: 1, windDir: 0.7 },
     windKn: 12,
     gustKn: 18,
     waveM: 0.8,
@@ -184,13 +184,13 @@ describe('spotStats', () => {
   it('averages the factors and counts the hours the gates ruled out', async () => {
     const { id } = await createSpot(db, BONDI);
     await record(id, [
-      hour(isoHoursAgo(4), { factors: { tide: 1, wind: 0.4, wave: 0.6, rain: 1 } }),
-      hour(isoHoursAgo(5), { factors: { tide: 0, wind: 0.6, wave: 0.4, rain: 0 }, unfishable: true }),
+      hour(isoHoursAgo(4), { factors: { tide: 1, wind: 0.4, wave: 0.6, weather: 1, windDir: 0.7 } }),
+      hour(isoHoursAgo(5), { factors: { tide: 0, wind: 0.6, wave: 0.4, weather: 0, windDir: 0.7 }, unfishable: true }),
     ]);
 
     const stats = await spotStats(db, id);
 
-    expect(stats.factors).toEqual({ tide: 0.5, wind: 0.5, wave: 0.5, rain: 0.5 });
+    expect(stats.factors).toEqual({ tide: 0.5, wind: 0.5, wave: 0.5, weather: 0.5, windDir: 0.7 });
     expect(stats.unfishableShare).toBe(0.5);
     expect(stats.samples).toBe(2);
   });

@@ -5,29 +5,36 @@
  */
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { gatedScore, roughScore, score } from '../fixtures/conditions';
+import { gatedScore, primeScore, roughScore, score } from '../fixtures/conditions';
 import { Verdict } from './Verdict';
 
 const SUMMARY = 'Tide coming in, light southerly, small swell.';
 
 describe('Verdict', () => {
   it('leads with the band word and follows with the score', () => {
-    render(<Verdict score={score} summary={SUMMARY} />);
+    render(<Verdict score={primeScore} summary={SUMMARY} />);
 
     expect(screen.getByText('Prime')).toBeInTheDocument();
-    expect(screen.getByText(String(score.score))).toBeInTheDocument();
+    expect(screen.getByText(String(primeScore.score))).toBeInTheDocument();
     expect(screen.getByText(SUMMARY)).toBeInTheDocument();
   });
 
   it('bands a middling score as Fair rather than Prime', () => {
-    render(<Verdict score={roughScore} summary={SUMMARY} />);
+    // The same calm conditions hours off the light. Only Prime is withheld.
+    render(<Verdict score={score} summary={SUMMARY} />);
 
     expect(screen.getByText('Fair')).toBeInTheDocument();
     expect(screen.queryByText('Prime')).not.toBeInTheDocument();
   });
 
+  it('bands a blown-out hour as Poor', () => {
+    render(<Verdict score={roughScore} summary={SUMMARY} />);
+
+    expect(screen.getByText('Poor')).toBeInTheDocument();
+  });
+
   it('stays silent about gates when none tripped', () => {
-    render(<Verdict score={score} summary={SUMMARY} />);
+    render(<Verdict score={primeScore} summary={SUMMARY} />);
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
