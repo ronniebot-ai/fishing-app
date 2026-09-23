@@ -10,7 +10,15 @@
  * `buildTheme` and `applyCssVars` in ./antdTheme.
  *
  * The `:root` blocks in index.css hold the same values a second time on
- * purpose: they are what paints during the window before JS has run.
+ * purpose: they are what paints during the window before JS has run. The two
+ * copies must agree. `applyCssVars` writes this file's values as inline style
+ * on `<html>`, which outranks the stylesheet — so a colour changed only in
+ * index.css looks right until hydration and is then silently reverted.
+ *
+ * Only the keys antd needs live here. The spine's own colours — the score
+ * bands, their washes, the chart panel and the day divider — are CSS-only,
+ * because nothing outside the chart reads them and antd has no token to feed
+ * them to. They are therefore not in `cssVarName` and not overwritten.
  */
 
 export type Mode = 'dark' | 'light';
@@ -47,11 +55,11 @@ export const palette: Record<Mode, Palette> = {
     dim: '#7fa0ad',
     rule: '#16394b',
     ruleSoft: '#102f40',
-    curve: '#2fa5b8',
-    curveInk: '#5bc8d8',
-    curveFill: 'rgba(47, 165, 184, 0.16)',
-    wash: 'rgba(47, 165, 184, 0.11)',
-    gust: '#c9822f',
+    curve: '#86e3f2',
+    curveInk: '#a8eef9',
+    curveFill: 'rgba(134, 227, 242, 0.13)',
+    wash: 'rgba(134, 227, 242, 0.1)',
+    gust: '#ffc880',
     accent: '#f2617a',
     good: '#5bd8a6',
     warn: '#f2a65a',
