@@ -32,23 +32,23 @@
     "react-leaflet": "^5.0.0"
   },
   "devDependencies": {
-    "@storybook/react-vite": "^10.6.0",
-    "@testing-library/dom": "^10.4.1",
+    "@storybook/react-vite": "^10.6.2",
+    "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
-    "@testing-library/user-event": "^14.6.7",
+    "@testing-library/user-event": "^14.6.8",
     "@types/leaflet": "^1.9.22",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
-    "@vitejs/plugin-react": "^6.1.0",
-    "jsdom": "^30.0.1",
+    "@vitejs/plugin-react": "^6.1.2",
+    "jsdom": "^30.1.3",
     "mongodb-memory-server": "^11.3.0",
-    "oxlint": "^1.79.0",
+    "oxlint": "^1.88.0",
     "storybook": "^10.6.0",
     "typescript": "~6.0.2",
-    "vite": "^8.2.2",
-    "vitest": "^5.0.0"
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
   },
   "description": "Wind, swell, tide and rain for Australian coastal fishing spots.",
   "author": {
